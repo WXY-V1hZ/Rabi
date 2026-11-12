@@ -1,18 +1,25 @@
 {
   "name": "rabi",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "private": true,
   "description": "",
   "keywords": [],
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "lint": "oxlint --fix .",
-    "fmt": "oxfmt"
+    "dev": "pnpm -r --parallel --if-present run dev",
+    "build": "pnpm -r --if-present run build",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "check": "pnpm fmt:check && pnpm lint && pnpm typecheck",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0"
   },
@@ -22,6 +29,9 @@
       "version": "12.18.0",
       "onFail": "download"
     }
+  },
+  "engines": {
+    "node": ">=22.12.0"
   },
   "packageManager": "pnpm@12.18.0"
 }
