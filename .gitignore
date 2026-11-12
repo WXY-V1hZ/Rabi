@@ -1,0 +1,78 @@
+# ---- Dependencies ----
+node_modules/
+.pnpm-store/
+
+# ---- Build Output ----
+dist/
+build/
+out/
+.output/
+*.tsbuildinfo
+
+# ---- Vite / Frontend ----
+.vite/
+.vite-inspect/
+stats.html
+stats.json
+
+# ---- Framework (if applicable) ----
+.next/
+.nuxt/
+.svelte-kit/
+.vercel/
+.netlify/
+.turbo/
+
+# ---- Testing ----
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+*.lcov
+
+# ---- Logs ----
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---- Environment ----
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ---- pnpm ----
+.pnpm-debug.log*
+
+# ---- IDE / Editor ----
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+
+# ---- OS ----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# ---- Misc ----
+*.tgz
+*.pid
+*.pid.lock
+.cache/
+.eslintcache
