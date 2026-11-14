@@ -3,18 +3,21 @@ import { createModels } from "@earendil-works/pi-ai";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { z } from "zod";
 import { getCurrentTime } from "./executor.ts";
 
 const app = new Hono();
 const models = createModels();
 models.setProvider(deepseekProvider());
 let busy = false;
+const messageSchema = z.string().trim().min(1, "消息不能为空").max(16000, "消息过长");
 
 app.post("/", bodyLimit({ maxSize: 16000 }), async (ctx) => {
-    const text = (await ctx.req.text()).trim();
-    if (!text) {
-        return ctx.text("消息不能为空", 400);
+    const result = messageSchema.safeParse(await ctx.req.text());
+    if (!result.success) {
+        return ctx.text(result.error.issues[0]?.message ?? "消息格式不正确", 400);
     }
+    const text = result.data;
     if (busy) {
         return ctx.text("正在处理消息，请稍后再试", 503);
     }

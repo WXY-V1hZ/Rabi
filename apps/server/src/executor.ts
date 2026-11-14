@@ -1,6 +1,7 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { Hono } from "hono";
 import type { WSContext } from "hono/ws";
+import { toolResultSchema } from "protocol";
 
 const app = new Hono();
 let executor: WSContext | undefined;
@@ -69,22 +70,13 @@ app.get(
                 return;
             }
             try {
-                const result: unknown = JSON.parse(event.data);
-                if (
-                    typeof result !== "object" ||
-                    result === null ||
-                    !("id" in result) ||
-                    typeof result.id !== "string" ||
-                    result.id.length > 128 ||
-                    !("time" in result) ||
-                    typeof result.time !== "string" ||
-                    result.time.length > 64 ||
-                    !Number.isFinite(Date.parse(result.time))
-                ) {
+                const data: unknown = JSON.parse(event.data);
+                const result = toolResultSchema.safeParse(data);
+                if (!result.success) {
                     ws.close(1008, "Invalid tool result");
                     return;
                 }
-                pending.get(result.id)?.(result.time);
+                pending.get(result.data.id)?.(result.data.time);
             } catch {
                 ws.close(1008, "Invalid JSON");
             }
