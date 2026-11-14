@@ -9,7 +9,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts --dev",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js"
@@ -18,10 +18,15 @@
     "@earendil-works/pi-agent-core": "^1.5.2",
     "@earendil-works/pi-ai": "^1.5.2",
     "@hono/node-server": "^2.1.8",
-    "hono": "^4.13.18"
+    "@hono/zod-validator": "^0.9.1",
+    "hono": "^4.13.18",
+    "protocol": "workspace:*",
+    "ws": "^8.23.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
     "typescript": "~7.0.2"
   }

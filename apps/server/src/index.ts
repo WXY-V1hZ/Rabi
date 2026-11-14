@@ -1,76 +1,52 @@
-import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels } from "@earendil-works/pi-ai";
-import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
-import { serve } from "@hono/node-server";
+import { createAdaptorServer } from "@hono/node-server";
 import { Hono } from "hono";
-import { bodyLimit } from "hono/body-limit";
+import { WebSocketServer } from "ws";
+import { logger } from "hono/logger";
+
+import chat from "./chat.ts";
+import executor from "./executor.ts";
 
 const app = new Hono();
-const models = createModels();
-models.setProvider(deepseekProvider());
-let busy = false;
 
-app.get("/", (c) => c.text("Rabi Server"));
+app.use(logger());
 
-app.post("/chat", bodyLimit({ maxSize: 16000 }), async (c) => {
-    const text = (await c.req.text()).trim();
-    if (!text) {
-        return c.text("消息不能为空", 400);
+app.get("/", (ctx) => ctx.text("Rabi Server"));
+
+app.route("/chat", chat);
+app.route("/executor", executor);
+
+const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
+const server = createAdaptorServer({ fetch: app.fetch, websocket: { server: wss } });
+const development = process.argv.includes("--dev");
+let port = 3000;
+
+server.on("error", (error: NodeJS.ErrnoException) => {
+    if (development && error.code === "EADDRINUSE" && port < 3010) {
+        console.warn(`端口 ${port} 已占用，尝试 ${port + 1}`);
+        port += 1;
+        server.listen(port, "127.0.0.1");
+        return;
     }
-    if (busy) {
-        return c.text("正在处理消息，请稍后再试", 503);
-    }
-    if (!process.env.DEEPSEEK_API_KEY) {
-        return c.text("服务端尚未配置 DeepSeek API Key", 503);
-    }
-
-    const model = models.getModel("deepseek", "deepseek-flash");
-    if (!model) {
-        return c.text("服务端未找到 DeepSeek 模型", 503);
-    }
-
-    // 每个请求创建独立上下文；会话接续后续再实现。
-    const agent = new Agent({
-        initialState: {
-            systemPrompt: "你是 Rabi 的编程助手，请用中文简洁回答。",
-            model,
-            thinkingLevel: "off",
-        },
-        streamFn: (model, context, options) =>
-            models.streamSimple(model, context, { ...options, maxTokens: 1024 }),
-    });
-
-    busy = true;
-    const timeout = setTimeout(() => agent.abort(), 120000);
-    try {
-        await agent.prompt(text);
-        const message = agent.state.messages.findLast((message) => message.role === "assistant");
-        if (message?.role === "assistant" && message.stopReason === "aborted") {
-            return c.text("模型响应超时", 504);
-        }
-        if (agent.state.errorMessage || message?.role !== "assistant") {
-            return c.text("模型请求失败", 502);
-        }
-
-        const reply = message.content
-            .filter((block) => block.type === "text")
-            .map((block) => block.text)
-            .join("");
-        if (!reply.trim()) {
-            return c.text("模型未返回正文", 502);
-        }
-        return c.text(reply);
-    } catch {
-        return c.text("模型请求失败", 502);
-    } finally {
-        clearTimeout(timeout);
-        busy = false;
-    }
+    console.error(`服务启动失败：${error.message}`);
+    process.exitCode = 1;
+    wss.close();
 });
 
-const server = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: 3000 }, (info) => {
-    console.log(`Rabi Server: http://127.0.0.1:${info.port}`);
+server.on("listening", () => {
+    console.log(`Rabi Server: http://127.0.0.1:${port}`);
 });
 
-process.once("SIGINT", () => server.close());
-process.once("SIGTERM", () => server.close());
+server.listen(port, "127.0.0.1");
+
+function shutdown() {
+    console.log("\nShutting down");
+    for (const client of wss.clients) {
+        client.terminate();
+    }
+    wss.close();
+    server.close();
+    console.log("bye");
+}
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
