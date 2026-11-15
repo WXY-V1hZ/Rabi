@@ -1,9 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "./index.css";
 import App from "./App.tsx";
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root");
+if (!root) {
+    throw new Error("缺少应用挂载节点 #root");
+}
+
+createRoot(root).render(
     <StrictMode>
         <App />
     </StrictMode>,

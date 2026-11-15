@@ -1,65 +1,11 @@
-import { toolRequestSchema, type ToolResult } from "protocol";
+const args = process.argv.slice(2);
+const command = args[0];
 
-const socket = new WebSocket(process.env.SERVER_URL ?? "ws://127.0.0.1:3000/executor");
-
-// WebSocket 建连后还需收到应用层确认，才能结束握手等待。
-const timeout = setTimeout(() => {
-    console.error("等待 Server 确认超时");
+if (command === "login") {
+    console.log("准备开始登录");
+} else if (command === undefined || command === "--help") {
+    console.log("用法：rabi login");
+} else {
+    console.error(`未知命令：${command}`);
     process.exitCode = 1;
-    socket.close();
-}, 10000);
-
-socket.addEventListener("open", () => {
-    console.log("已连接 Server，发送 hello");
-    socket.send("hello");
-});
-
-function rejectRequest() {
-    console.error("Server 返回了无效的工具请求");
-    process.exitCode = 1;
-    socket.close(1008, "Invalid tool request");
 }
-
-socket.addEventListener("message", (event) => {
-    if (event.data === "connected") {
-        clearTimeout(timeout);
-        console.log("Server: connected");
-        return;
-    }
-    try {
-        if (typeof event.data !== "string" || event.data.length > 1024) {
-            rejectRequest();
-            return;
-        }
-        const data: unknown = JSON.parse(event.data);
-        const request = toolRequestSchema.safeParse(data);
-        if (!request.success) {
-            rejectRequest();
-            return;
-        }
-        // 在 Executor 侧读取时间，以验证工具确实在执行设备上运行。
-        const time = new Date().toISOString();
-        const result: ToolResult = { id: request.data.id, time };
-        socket.send(JSON.stringify(result));
-        console.log(`执行 get_current_time (${request.data.id}): ${time}`);
-    } catch {
-        rejectRequest();
-    }
-});
-
-socket.addEventListener("error", () => {
-    clearTimeout(timeout);
-    console.error("无法连接 Server 或连接发生错误");
-    process.exitCode = 1;
-});
-
-socket.addEventListener("close", (event) => {
-    clearTimeout(timeout);
-    console.log(`与 Server 的连接已关闭 (${event.code})`);
-    if (event.code !== 1000 && event.code !== 1001) {
-        process.exitCode = 1;
-    }
-});
-
-process.once("SIGINT", () => socket.close(1000, "Executor shutting down"));
-process.once("SIGTERM", () => socket.close(1000, "Executor shutting down"));
