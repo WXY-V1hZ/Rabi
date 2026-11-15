@@ -15,6 +15,7 @@ app.get("/", (ctx) => ctx.text("Rabi Server"));
 app.route("/chat", chat);
 app.route("/executor", executor);
 
+// WebSocket 升级由 Hono 适配器处理，与 HTTP 路由共用同一个端口。
 const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
 const server = createAdaptorServer({ fetch: app.fetch, websocket: { server: wss } });
 const development = process.argv.includes("--dev");

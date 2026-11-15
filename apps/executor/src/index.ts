@@ -1,7 +1,8 @@
-import { toolRequestSchema } from "protocol";
+import { toolRequestSchema, type ToolResult } from "protocol";
 
 const socket = new WebSocket(process.env.SERVER_URL ?? "ws://127.0.0.1:3000/executor");
 
+// WebSocket 建连后还需收到应用层确认，才能结束握手等待。
 const timeout = setTimeout(() => {
     console.error("等待 Server 确认超时");
     process.exitCode = 1;
@@ -36,8 +37,10 @@ socket.addEventListener("message", (event) => {
             rejectRequest();
             return;
         }
+        // 在 Executor 侧读取时间，以验证工具确实在执行设备上运行。
         const time = new Date().toISOString();
-        socket.send(JSON.stringify({ id: request.data.id, time }));
+        const result: ToolResult = { id: request.data.id, time };
+        socket.send(JSON.stringify(result));
         console.log(`执行 get_current_time (${request.data.id}): ${time}`);
     } catch {
         rejectRequest();

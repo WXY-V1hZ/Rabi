@@ -9,6 +9,7 @@ import { getCurrentTime } from "./executor.ts";
 const app = new Hono();
 const models = createModels();
 models.setProvider(deepseekProvider());
+// 当前只有一个 Executor，且只接受一个待处理工具调用；暂时串行处理聊天请求。
 let busy = false;
 const messageSchema = z.string().trim().min(1, "消息不能为空").max(16000, "消息过长");
 
@@ -59,6 +60,7 @@ app.post("/", bodyLimit({ maxSize: 16000 }), async (ctx) => {
     const timeout = setTimeout(() => agent.abort(), 120000);
     try {
         await agent.prompt(text);
+        // 工具调用会产生中间 assistant 消息，取最后一条作为本轮回复。
         const message = agent.state.messages.findLast((message) => message.role === "assistant");
         if (message?.role === "assistant" && message.stopReason === "aborted") {
             return ctx.text("模型响应超时", 504);

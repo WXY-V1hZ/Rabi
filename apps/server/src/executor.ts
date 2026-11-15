@@ -1,10 +1,11 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { Hono } from "hono";
 import type { WSContext } from "hono/ws";
-import { toolResultSchema } from "protocol";
+import { toolResultSchema, type ToolRequest } from "protocol";
 
 const app = new Hono();
 let executor: WSContext | undefined;
+// 用调用 ID 关联工具结果与等待中的请求，避免迟到结果被交给后续调用。
 const pending = new Map<string, (result: string | Error) => void>();
 
 export function getCurrentTime(signal?: AbortSignal): Promise<string> {
@@ -21,6 +22,7 @@ export function getCurrentTime(signal?: AbortSignal): Promise<string> {
 
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
+        // 成功、超时、取消和断线共用清理路径，释放当前工具调用占用。
         const finish = (result: string | Error) => {
             clearTimeout(timeout);
             signal?.removeEventListener("abort", onAbort);
@@ -34,7 +36,8 @@ export function getCurrentTime(signal?: AbortSignal): Promise<string> {
         signal?.addEventListener("abort", onAbort, { once: true });
         try {
             console.log(`请求 Executor 执行 get_current_time (${id})`);
-            socket.send(JSON.stringify({ id, tool: "get_current_time" }));
+            const request: ToolRequest = { id, tool: "get_current_time" };
+            socket.send(JSON.stringify(request));
         } catch {
             finish(new Error("无法发送工具请求"));
         }
@@ -42,6 +45,7 @@ export function getCurrentTime(signal?: AbortSignal): Promise<string> {
 }
 
 function disconnect(socket: WSContext) {
+    // 旧连接的关闭事件可能晚于新连接注册，不能清除新连接及其请求。
     if (executor !== socket) return;
     executor = undefined;
     for (const finish of pending.values()) {
@@ -56,6 +60,7 @@ app.get(
             console.log("Executor 已连接");
         },
         onMessage(event, ws) {
+            // hello 只用于登记当前执行连接；该握手尚不提供身份认证。
             if (event.data === "hello") {
                 if (executor && executor !== ws) {
                     ws.close(1008, "Executor already connected");
