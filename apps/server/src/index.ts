@@ -6,9 +6,13 @@ const app = new Hono();
 
 app.use(logger());
 
-app.get("/", (ctx) => ctx.text("Rabi Server"));
+app.get("/", (ctx) => {
+    return ctx.text("Rabi Server");
+});
 
-const server = createAdaptorServer({ fetch: app.fetch });
+const server = createAdaptorServer({
+    fetch: app.fetch,
+});
 const development = process.argv.includes("--dev");
 let port = 3000;
 

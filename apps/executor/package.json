@@ -15,6 +15,8 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@effect/platform-node": "4.1.4",
+    "effect": "4.1.4",
     "protocol": "workspace:*"
   },
   "devDependencies": {

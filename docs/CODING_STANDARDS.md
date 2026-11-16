@@ -19,6 +19,7 @@
 
 ## TypeScript 与数据建模
 
+- 箭头函数使用大括号包裹函数体，返回值显式使用 `return`，不使用隐式返回。
 - 保持严格类型检查；优先类型推断，在公开边界和推断不清楚处显式标注。
 - 外部未知数据使用 `unknown`，校验后再使用；类型声明和断言不能代替运行时校验。参考 [TypeScript 类型收窄](https://www.typescriptlang.org/docs/handbook/2/narrowing.html)。
 - 不用 `any`、双重断言、非空断言或检查禁用注释掩盖错误；确需兼容时限制作用范围，并说明成立条件或原因。
