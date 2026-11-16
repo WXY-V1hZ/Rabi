@@ -1,6 +1,6 @@
 # 架构设计
 
-本文记录 Rabi 已确定的架构与技术选型，不代表相关功能已实现。
+本文记录 Rabi 的目标架构与技术选型，不代表相关功能或依赖迁移已实现；候选项明确标注，实际安装版本以各包配置与锁文件为准。
 
 ## 系统组成
 
@@ -12,9 +12,11 @@
 
 Web 前端静态资源与 Server 部署在云端，用户通过网址访问，前端界面在浏览器中运行。Executor 留在开发机，操作本地仓库与工具链；三者是逻辑职责，可独立部署，也可由同一程序承载。
 
-Client 与 Server 交换用户消息和运行事件；Executor 与 Server 交换工具请求和结果。两类连接分别校验身份与权限，Executor 还需校验服务端身份并落实本地执行授权。
+Web 通过 HTTPS 向 Server 提交操作和查询，通过 SSE 接收运行事件；Executor 通过主动建立的 WSS 交换工具请求和结果。各入口分别校验身份与权限，Executor 还需校验服务端身份并落实本地执行授权。
 
 浏览器关闭不影响已发起任务的推进。
+
+Server 初期作为常驻的模块化单体部署，在进程内划分账号、会话、运行调度、Executor 连接和事件分发模块。数据库池归属于应用生命周期；HTTP 请求、事件订阅、Executor 连接与 Agent 运行各有独立的生命周期，结束请求或订阅不隐式取消运行。
 
 ## 模块文档
 
@@ -45,37 +47,48 @@ Executor 离线时暂停相关调度，已下发工具调用的状态由 Server 
 
 ## 技术栈
 
-| 层次           | 选型                  | 职责                                                  |
-| -------------- | --------------------- | ----------------------------------------------------- |
-| 开发语言       | TypeScript            | 统一浏览器、云端与本地执行器的开发语言                |
-| 工程组织       | pnpm workspace        | 管理应用与共享协议包，沿用现有 monorepo 结构          |
-| 前端           | React + Vite          | 沿用现有基础，构建跨终端访问的 Web 界面               |
-| 后端框架       | Hono                  | HTTP 路由、中间件及网络入口处理                       |
-| 运行时校验     | Zod                   | 校验外部数据，并从 Schema 推导 TypeScript 类型        |
-| Agent 运行内核 | pi-agent-core + pi-ai | 复用 Agent Loop、工具执行接口、运行事件与模型接入能力 |
-| 数据库         | PostgreSQL            | 持久保存会话、运行和工具调用等业务数据                |
-| 数据访问       | Drizzle ORM           | 定义数据库模型，编写类型化查询与事务                  |
-| 数据库迁移     | Drizzle Kit           | 生成和管理数据库迁移                                  |
+| 层次           | 选型                                 | 职责                                          |
+| -------------- | ------------------------------------ | --------------------------------------------- |
+| 开发语言       | TypeScript 严格模式                  | 统一浏览器、云端与本地执行器的开发语言        |
+| 工程组织       | pnpm workspace                       | 管理应用与共享协议包                          |
+| 运行时         | Node.js 24 LTS                       | 运行 Server 与 Executor                       |
+| 前端           | React + Vite SPA                     | 构建跨终端访问的 Web 界面                     |
+| 前端配套候选   | TanStack Router + TanStack Query     | 页面路由、服务端数据获取与缓存，待确认        |
+| 后端与执行模型 | Effect 4 + Effect HTTP / HttpApi     | HTTP 契约、业务操作、依赖、并发与资源生命周期 |
+| 运行时校验     | Effect Schema                        | 校验、编解码并推导跨端类型                    |
+| 账号认证候选   | Better Auth                          | 注册、登录、会话与第三方身份关联，待确认      |
+| Agent 运行内核 | pi-agent-core + pi-ai                | 复用 Agent Loop、工具接口与模型接入           |
+| 数据库         | PostgreSQL 18                        | 持久保存账号、会话、运行和工具调用等业务数据  |
+| 数据访问与迁移 | Drizzle ORM + Drizzle Kit            | 数据库模型、查询、事务与迁移                  |
+| 验证           | Vitest + @effect/vitest + Playwright | 业务、异步生命周期与端到端验证                |
+| 云端部署       | Linux + Docker Compose + Caddy       | 常驻服务、数据库、HTTPS 与反向代理            |
 
 ### 选择理由与使用范围
 
-**TypeScript 全栈。** 共享协议集中在 `packages/protocol`，由 Zod Schema 推导类型，减少三端各自维护消息定义造成的不一致。类型检查不能替代运行时校验；数据库模型、Pi 内部类型和应用实现不直接作为跨端协议。
+**TypeScript 与共享契约。** HTTP 契约、运行事件与 Executor 消息集中在 `packages/protocol`，使用 Effect Schema 推导类型并完成运行时校验；HTTP 接口通过 HttpApi 描述。数据库模型、Pi 内部类型和服务端依赖不作为跨端协议，不为同一协议重复维护 Zod 定义。
 
-**Hono + Zod。** Hono 的路由和中间件组织方式简洁，符合当前项目规模；业务逻辑通过普通 TypeScript 模块组织。HTTP 输入可通过 `@hono/zod-validator` 接入 Zod；连接建立后的消息和配置等外部数据也需在各自入口校验。Schema 校验负责数据形状与约束，身份、资源权限和状态转换是否合法由业务逻辑判断。
+**Effect。** Server 采用 Effect HTTP 替代 Hono；Server 与 Executor 的业务操作统一使用 Effect 表达预期错误、依赖、取消与资源管理，在明确入口通过服务与 Layer 装配。第三方 Promise、回调和取消接口在适配边界连接；包装为 Effect 不自动提供底层取消、幂等性或跨进程恢复。Schema 校验负责数据形状，业务模块校验权限与状态转换。
 
-**pi-agent-core + pi-ai。** 复用模型调用与基础 Loop，由 Rabi 提供远程工具实现，并管理持久化、执行器通信和故障恢复。Pi 的内存状态与事件接口不等于持久化任务引擎。先通过包依赖集成，确有接口限制时再评估修改上游源码。
+**前端与账号候选。** TanStack Router 负责 URL 与页面匹配，TanStack Query 管理服务端数据的获取、缓存和失效；仍为 React SPA。Better Auth 是部署在 Rabi Server 内的认证库，账号数据留在 Rabi 数据库中。候选的使用范围与确认状态见对应模块文档；不因选用其中一个组件而引入整套生态。
 
-**PostgreSQL + Drizzle。** 会话、运行、工具调用和设备之间具有明确关联，关系型存储便于表达这些关系及一致性约束。Drizzle 的查询方式接近 SQL，便于明确事务与条件更新；数据库约束和业务逻辑共同保证数据一致性，ORM 类型检查不能代替它们。数据库模型留在后端，网络协议独立定义。迁移文件纳入版本管理并审查生成的 SQL。
+**pi-agent-core + pi-ai。** 复用模型调用与基础 Loop，由 Rabi 提供远程工具实现，并管理持久化、执行器通信和故障恢复。Pi 的运行接口通过适配层接入 Effect，不为统一执行模型重写 Agent Loop；任务状态与去重仍由 Rabi 明确设计。
 
-### 运行环境与待定事项
+**PostgreSQL + Drizzle。** 关系模型表达账号、会话、运行、工具调用和设备之间的关联及一致性约束。Drizzle 查询通过兼容的 Effect 原生接口或适配层执行，事务边界由业务操作明确；认证库按其数据库适配接口单独接入，不假定 Effect 原生数据库对象与 Promise 接口可互换。数据库模型留在后端，迁移文件纳入版本管理并审查生成的 SQL。
 
-当前服务端与执行器工程以 Node.js 为运行基础。Hono 可以适配不同运行时，但部署平台尚未确定；部署到 Cloudflare Workers 仍需验证 Pi 及模型 Provider 的兼容性，并设计后台任务生命周期和连接协调。
+**通信。** Web 的操作和查询使用 HTTP，进度与运行事件通过 SSE 推送；Executor 使用 WSS 双向通信。事件补发、工具去重与结果核对依赖持久化及业务协议，SSE 或 WebSocket 重连本身不保证恢复。OAuth 与认证库端点保持其标准请求、响应语义。
 
-数据库驱动、具体依赖版本、消息协议、账号绑定与鉴权流程、心跳和超时参数、重连后的调用状态核对协议及调度实现待后续设计确定。连接资源优化暂缓，后续按实际负载评估。安装依赖时核对运行版本与包之间的兼容性。技术选型本身不保证断线接续、执行去重或跨进程恢复，这些能力需要独立设计与验证。
+### 版本、运行环境与待定事项
+
+当前方案使用 Effect 4 正式版本线，不沿用参考仓库的 beta.70。HTTP 等部分模块仍标为 `unstable`，API 可能在次版本或补丁版本变更；使用精确版本和锁文件，升级时核对同版本文档、类型及发行说明，并验证协议、取消、连接释放和集成行为。Effect 3 是可评估的替代版本线，不在业务中混用两代 API。
+
+云端采用常驻 Node.js 服务，初期单实例部署；本地 daemon 首先以 Linux systemd 托管，其他平台服务适配后续扩展。参考项目中的 Cloudflare 绑定、请求级数据库池和 Worker 入口不作为本项目运行约定。
+
+TanStack 与 Better Auth 是否采用、Drizzle 驱动及各依赖的兼容版本组合、具体协议、设备授权接口与令牌生命周期、心跳和超时参数、状态核对与事件补发策略仍待确认或设计。Effect 4 与 Drizzle、认证库等组合须经集成验证；文档选型不代表当前依赖已迁移或兼容性已验证。
 
 ### 参考
 
-- [Hono：Node.js 运行方式](https://hono.dev/docs/getting-started/nodejs)与[输入校验](https://hono.dev/docs/guides/validation)
-- [Zod：Schema 与类型推导](https://zod.dev/)
+- [Effect 4 与稳定性说明](https://effect.website/blog/releases/effect/40)、[HttpApi](https://effect.website/docs/v4/api/effect/http-api/HttpApi)
+- [TanStack Router](https://tanstack.com/router/latest/docs/framework/react/overview)、[TanStack Query](https://tanstack.com/query/latest/docs/framework/react/overview)
+- [Better Auth](https://better-auth.com/docs/introduction)与[设备授权](https://better-auth.com/docs/plugins/device-authorization)
 - [Pi Agent Core](https://github.com/earendil-works/pi/tree/main/packages/agent)与[Pi AI](https://github.com/earendil-works/pi/tree/main/packages/ai)
-- [Drizzle：PostgreSQL 接入](https://orm.drizzle.team/docs/get-started-postgresql)
+- [Drizzle：Effect PostgreSQL 接入](https://orm.drizzle.team/docs/connect-effect-postgres)
