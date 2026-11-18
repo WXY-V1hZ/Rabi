@@ -5,7 +5,7 @@
 ## 工程原则
 
 - 编写或审查代码前，阅读并遵守 [编码规范](docs/CODING_STANDARDS.md)。
-- 编写或审查 Effect 代码前，阅读 [Effect 参考约定](repos/AGENTS.md)，按其中指引查阅本地源码。
+- 编写、审查、调试或讲解 Effect 代码时，必须使用 [effect-v4 skill](.agents/skills/effect-v4/SKILL.md)，按其指引查阅本地源码。
 - 涉及技术选型或架构设计时，先阅读 [架构设计](docs/ARCHITECTURE.md)，沿用已确定的决策。
 - 修改包前，先阅读该包的 `AGENTS.md`；涉及跨包交互时，同时阅读相关包的设计约束。
 - 遵循 **Occam's Razor、KISS、YAGNI**，沿用现有结构与约定；仅在有明确收益时引入抽象、依赖或架构调整。
