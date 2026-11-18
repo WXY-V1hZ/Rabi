@@ -39,16 +39,47 @@ const PositiveSeconds = Schema.Number.check(
 );
 
 export const DeviceAuthorizationResponse = Schema.Struct({
-    device_code: Schema.String.check(
+    deviceCode: Schema.String.check(
         Schema.isBetweenLength(1, 4096),
         Schema.isPattern(/^[\x21-\x7e]+$/u),
     ),
-    user_code: Schema.String.check(
+    userCode: Schema.String.check(
         Schema.isBetweenLength(1, 128),
         Schema.isPattern(/^[\x21-\x7e]+$/u),
     ),
-    verification_uri: DeviceAuthorizationUri,
-    verification_uri_complete: Schema.optionalKey(DeviceAuthorizationUri),
-    expires_in: PositiveSeconds,
+    verificationUri: DeviceAuthorizationUri,
+    verificationUriComplete: Schema.optionalKey(DeviceAuthorizationUri),
+    expiresIn: PositiveSeconds,
     interval: Schema.optionalKey(PositiveSeconds),
+}).pipe(
+    Schema.encodeKeys({
+        deviceCode: "device_code",
+        userCode: "user_code",
+        verificationUri: "verification_uri",
+        verificationUriComplete: "verification_uri_complete",
+        expiresIn: "expires_in",
+    }),
+);
+
+const TokenValue = Schema.RedactedFromValue(Schema.NonEmptyString);
+
+export const DeviceTokenResponse = Schema.Struct({
+    accessToken: TokenValue,
+    tokenType: Schema.NonEmptyString,
+    expiresIn: Schema.optionalKey(
+        Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    ),
+    refreshToken: Schema.optionalKey(TokenValue),
+    scope: Schema.optionalKey(Schema.NonEmptyString),
+}).pipe(
+    Schema.encodeKeys({
+        accessToken: "access_token",
+        tokenType: "token_type",
+        expiresIn: "expires_in",
+        refreshToken: "refresh_token",
+    }),
+);
+
+export const DeviceTokenErrorResponse = Schema.Struct({
+    error: Schema.NonEmptyString,
 });

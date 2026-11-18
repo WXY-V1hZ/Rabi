@@ -1,7 +1,8 @@
 import { Command, Flag } from "effect/cli";
 import { Console, Effect } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { login } from "./login.ts";
+import { startDeviceAuthorization } from "./login.ts";
+import { FetchHttpClient } from "effect/http";
 
 const loginCommand = Command.make(
     "login",
@@ -14,10 +15,20 @@ const loginCommand = Command.make(
         ),
     },
     (options) => {
-        return login(options).pipe(
-            Effect.catchTag("LoginError", (error) => {
+        return Effect.gen(function* () {
+            const auth = yield* startDeviceAuthorization(options);
+            yield* Console.log(`请在浏览器中打开：${auth.verificationUri}`);
+            yield* Console.log(`确认码：${auth.userCode}`);
+            yield* Console.log(
+                `请核对确认码，并在 ${auth.expiresIn} 秒内批准绑定。`,
+            );
+            yield* Console.log(
+                "当前步骤仅申请授权，尚未等待授权结果或保存凭据。",
+            );
+        }).pipe(
+            Effect.catchTag("LoginError", (err) => {
                 return Effect.gen(function* () {
-                    yield* Console.error(error.message);
+                    yield* Console.error(err.message);
                     yield* Effect.sync(() => {
                         process.exitCode = 1;
                     });
@@ -36,6 +47,10 @@ const rabi = Command.make("rabi").pipe(
 
 const main = Command.run(rabi, {
     version: "0.1.0",
-}).pipe(Effect.provide(NodeServices.layer));
+}).pipe(
+    Effect.provide([NodeServices.layer, FetchHttpClient.layer]),
+    // 拒绝重定向
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+);
 
 NodeRuntime.runMain(main);

@@ -1,5 +1,11 @@
-import { Console, Data, Effect, Schema } from "effect";
-import { DeviceAuthorizationResponse, DeviceAuthorizationUri } from "protocol";
+import { ByteSize, Data, Effect, Schema, Stream } from "effect";
+import {
+    DeviceAuthorizationResponse,
+    DeviceAuthorizationUri,
+    DeviceTokenErrorResponse,
+    DeviceTokenResponse,
+} from "protocol";
+import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 
 class LoginError extends Data.TaggedError("LoginError")<{
     readonly message: string;
@@ -15,144 +21,168 @@ const ClientId = Schema.String.check(
     Schema.isPattern(/^[\x21-\x7e]+$/u),
 );
 
-const requestDeviceAuthorization = (endpoint: string, clientId: string) => {
-    return Effect.tryPromise({
-        try: async (signal) => {
-            // 发送请求
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: new URLSearchParams({
-                    client_id: clientId,
-                }),
-                redirect: "error",
-                signal,
-            });
+// 传入string得到函数
+const decodeAuthorization = Schema.decodeUnknownEffect(
+    Schema.fromJsonString(DeviceAuthorizationResponse),
+);
 
-            const reader = response.body?.getReader();
-            if (reader === undefined) {
-                throw new LoginError({
-                    message: "授权服务未返回响应内容",
-                });
-            }
+const decodeTokenResponse = Schema.decodeUnknownEffect(
+    Schema.fromJsonString(DeviceTokenResponse),
+);
 
-            try {
-                if (response.status !== 200) {
-                    throw new LoginError({
-                        message: `申请设备授权失败，HTTP ${response.status}`,
-                    });
-                }
-                const contentType = response.headers
-                    .get("content-type")
-                    ?.split(";")[0]
-                    ?.trim()
-                    .toLowerCase();
+const decodeTokenError = Schema.decodeUnknownEffect(
+    Schema.fromJsonString(DeviceTokenErrorResponse),
+);
 
-                if (contentType !== "application/json") {
-                    throw new LoginError({
-                        message: "授权服务未返回 JSON",
-                    });
-                }
-
-                const decoder = new TextDecoder();
-                let size = 0;
-                let body = "";
-
-                while (true) {
-                    const chunk = await reader.read();
-
-                    if (chunk.done) {
-                        break;
-                    }
-
-                    size += chunk.value.byteLength;
-
-                    if (size > 32 * 1024) {
-                        throw new LoginError({
-                            message: "授权服务响应超过大小限制",
-                        });
-                    }
-
-                    body += decoder.decode(chunk.value, {
-                        stream: true,
-                    });
-                }
-
-                body += decoder.decode();
-
-                const data: unknown = JSON.parse(body);
-                return data;
-            } finally {
-                try {
-                    await reader.cancel();
-                } finally {
-                    reader.releaseLock();
-                }
-            }
-        },
-        catch: (error) => {
-            return error instanceof LoginError
-                ? error
-                : new LoginError({
-                      message: "申请设备授权失败，请检查网络与服务端状态",
-                  });
-        },
-    }).pipe(
-        Effect.timeout("10 seconds"),
-        Effect.catchTag("TimeoutError", () => {
-            return Effect.fail(
-                new LoginError({
-                    message: "申请设备授权超时",
-                }),
-            );
-        }),
-    );
-};
-
-export const login = (options: LoginOptions) => {
-    return Effect.gen(function* () {
-        // 校验URL
+export const requestDeviceToken = Effect.fnUntraced(
+    function* (tokenEndpoint: string, clientId: string, deviceCode: string) {
         const endpoint = yield* Schema.decodeUnknownEffect(
             DeviceAuthorizationUri,
-        )(options.deviceAuthorizationEndpoint).pipe(
-            Effect.mapError(() => {
-                return new LoginError({
-                    message: "授权端点必须是有效的 HTTPS 地址；",
-                });
+        )(tokenEndpoint);
+
+        const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+        const request = HttpClientRequest.post(endpoint, {
+            acceptJson: true,
+        }).pipe(
+            HttpClientRequest.bodyUrlParams({
+                grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+                client_id: clientId,
+                device_code: deviceCode,
             }),
         );
 
-        const clientId = yield* Schema.decodeUnknownEffect(ClientId)(
-            options.clientId,
-        ).pipe(
-            Effect.mapError(() => {
-                return new LoginError({
-                    message: "client_id 必须是 1～256 个可打印 ASCII 字符",
-                });
+        const response = yield* client.execute(request);
+
+        if (response.status !== 200 && response.status !== 400) {
+            return yield* new LoginError({
+                message: `领取令牌失败，HTTP ${response.status}`,
+            });
+        }
+
+        const contentType = response.headers["content-type"]
+            ?.split(";")[0]
+            ?.trim()
+            .toLowerCase();
+
+        if (contentType !== "application/json") {
+            return yield* new LoginError({
+                message: "令牌端点未返回 JSON",
+            });
+        }
+
+        const body = yield* Stream.limitBytes<
+            LoginError | HttpClientError.HttpClientError,
+            never
+        >(response.stream, ByteSize.kibibytes(32), () => {
+            return Stream.fail(
+                new LoginError({ message: "令牌响应超过大小限制" }),
+            );
+        }).pipe(Stream.decodeText(), Stream.mkString);
+
+        if (response.status === 200) {
+            const token = yield* decodeTokenResponse(body);
+            return { _tag: "Granted" as const, token };
+        } else {
+            const { error } = yield* decodeTokenError(body);
+            return { _tag: "OAuthError" as const, error };
+        }
+    },
+    Effect.scoped,
+    Effect.timeout("10 seconds"),
+);
+
+const requestDeviceAuthorization = Effect.fnUntraced(
+    function* (endpoint: string, clientId: string) {
+        // 创建httpclient
+        const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+
+        // 构建请求
+        const request = HttpClientRequest.post(endpoint, {
+            acceptJson: true,
+        }).pipe(
+            HttpClientRequest.bodyUrlParams({
+                client_id: clientId,
             }),
         );
 
-        const data = yield* requestDeviceAuthorization(endpoint, clientId);
-        const authorization = yield* Schema.decodeUnknownEffect(
-            DeviceAuthorizationResponse,
-        )(data).pipe(
+        // 发送请求
+        const response = yield* client.execute(request);
+        if (response.status !== 200) {
+            return yield* new LoginError({
+                message: `申请设备授权失败，HTTP ${response.status}`,
+            });
+        }
+
+        // 校验返回内容
+        const contentType = response.headers["content-type"]
+            ?.split(";")[0]
+            ?.trim()
+            .toLowerCase();
+        if (contentType !== "application/json") {
+            return yield* new LoginError({
+                message: "授权服务未返回 JSON",
+            });
+        }
+
+        // 限制响应大小
+        const body = yield* Stream.limitBytes<
+            LoginError | HttpClientError.HttpClientError,
+            never
+        >(response.stream, ByteSize.kibibytes(32), () => {
+            return Stream.fail(
+                new LoginError({ message: "授权服务响应超过大小限制" }),
+            );
+        }).pipe(Stream.decodeText(), Stream.mkString);
+
+        return yield* decodeAuthorization(body).pipe(
             Effect.mapError(() => {
                 return new LoginError({
                     message: "授权服务返回的数据不符合设备授权协议",
                 });
             }),
         );
+    },
+    Effect.scoped,
+    Effect.timeout("10 seconds"),
+    Effect.catchTags({
+        HttpClientError: (err) => {
+            return new LoginError({
+                message:
+                    err.reason._tag === "EmptyBodyError"
+                        ? "授权服务未返回响应内容"
+                        : "申请设备授权失败，请检查网络与服务端状态",
+            });
+        },
+        TimeoutError: () => {
+            return new LoginError({ message: "申请设备授权超时" });
+        },
+    }),
+);
 
-        yield* Console.log(
-            `请在浏览器中打开：${authorization.verification_uri}`,
-        );
-        yield* Console.log(`确认码：${authorization.user_code}`);
-        yield* Console.log(
-            `请核对确认码，并在 ${authorization.expires_in} 秒内批准绑定。`,
-        );
-        yield* Console.log("当前步骤仅申请授权，尚未等待授权结果或保存凭据。");
-    });
-};
+export const startDeviceAuthorization = Effect.fnUntraced(function* (
+    options: LoginOptions,
+) {
+    // 检查endpoint
+    const endpoint = yield* Schema.decodeUnknownEffect(DeviceAuthorizationUri)(
+        options.deviceAuthorizationEndpoint,
+    ).pipe(
+        Effect.mapError(() => {
+            return new LoginError({
+                message: "授权端点必须是有效的 HTTPS 地址",
+            });
+        }),
+    );
+
+    // 检查clientId
+    const clientId = yield* Schema.decodeUnknownEffect(ClientId)(
+        options.clientId,
+    ).pipe(
+        Effect.mapError(() => {
+            return new LoginError({
+                message: "client_id 必须是 1~256 个可打印 ASCII 字符",
+            });
+        }),
+    );
+
+    return yield* requestDeviceAuthorization(endpoint, clientId);
+});
