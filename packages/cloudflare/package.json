@@ -1,0 +1,28 @@
+{
+  "name": "@repo/cloudflare",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Effectful, type-safe Cloudflare bindings for Effect Workers",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "effect": "catalog:",
+    "@cloudflare/workers-types": "^4.20241127.0"
+  }
+}
