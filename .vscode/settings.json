@@ -1,10 +1,11 @@
 {
-  "typescript.preferences.autoImportFileExcludePatterns": ["repos/**"],
-  "javascript.preferences.autoImportFileExcludePatterns": ["repos/**"],
+  "js/ts.preferences.autoImportFileExcludePatterns": ["repos/**"],
   "files.watcherExclude": {
     "**/repos/**": true
   },
   "search.exclude": {
     "repos/**": true
-  }
+  },
+  "oxc.configPath": ".oxlintrc.json",
+  "oxc.fmt.configPath": ".oxfmtrc.json"
 }
