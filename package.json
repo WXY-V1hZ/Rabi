@@ -16,7 +16,8 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "check": "pnpm fmt && pnpm lint && pnpm typecheck",
-    "prepare": "husky"
+    "prepare": "husky",
+    "rabi": "pnpm --filter executor cli"
   },
   "devDependencies": {
     "husky": "^9.1.7",
