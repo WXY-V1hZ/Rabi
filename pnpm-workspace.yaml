@@ -5,3 +5,7 @@ allowBuilds:
   "@google/genai": true
   esbuild: true
   protobufjs: true
+tasks:
+  typecheck:
+    dependsOn:
+      - ^build
