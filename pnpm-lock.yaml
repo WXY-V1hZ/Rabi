@@ -253,9 +253,6 @@ importers:
       effect:
         specifier: 4.1.4
         version: 4.1.4
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
     devDependencies:
       typescript:
         specifier: ~7.0.2
@@ -2723,4 +2720,5 @@ snapshots:
 
   ws@8.23.0: {}
 
-  zod@4.6.7: {}
+  zod@4.6.7:
+    optional: true

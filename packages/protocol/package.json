@@ -21,8 +21,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "effect": "4.1.4",
-    "zod": "^4.6.7"
+    "effect": "4.1.4"
   },
   "devDependencies": {
     "typescript": "~7.0.2"
