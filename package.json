@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel --if-present run dev",
     "build": "pnpm -r --if-present run build",
+    "clean": "pnpm -r exec node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && pnpm --filter ./apps/web exec tsc -b --clean",
     "typecheck": "pnpm -r --if-present run typecheck",
     "lint": "oxlint -c .oxlintrc.json .",
     "lint:fix": "oxlint -c .oxlintrc.json --fix .",
