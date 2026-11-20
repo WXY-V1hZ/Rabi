@@ -25,6 +25,7 @@ const tokenFixture = {
   executor_id: "executor-test",
 };
 
+let tokenPolls = 0;
 const mockHttpLayer = Layer.succeed(
   HttpClient.HttpClient,
   HttpClient.make((request, url) => {
@@ -38,9 +39,12 @@ const mockHttpLayer = Layer.succeed(
         HttpClientResponse.fromWeb(request, Response.json(authFixture)),
       );
     } else if (url.pathname === "/oauth/token") {
-      return Effect.succeed(
-        HttpClientResponse.fromWeb(request, Response.json(tokenFixture)),
-      );
+      const error = ["authorization_pending", "slow_down"][tokenPolls++];
+      const response =
+        error === undefined
+          ? Response.json(tokenFixture)
+          : Response.json({ error }, { status: 400 });
+      return Effect.succeed(HttpClientResponse.fromWeb(request, response));
     }
     return Effect.die(
       new Error(`收到非预期请求：${request.method} ${url.pathname}`),
