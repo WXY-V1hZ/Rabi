@@ -8,7 +8,7 @@
   },
   "oxc.configPath": ".oxlintrc.json",
   "oxc.fmt.configPath": ".oxfmtrc.json",
-  "editor.fontLigatures": true,
+  "explorer.sortOrder": "type",
   "js/ts.experimental.useTsgo": true,
   "js/ts.tsdk.path": "./node_modules/typescript/bin",
   "js/ts.tsdk.promptToUseWorkspaceVersion": true,
