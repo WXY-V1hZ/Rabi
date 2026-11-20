@@ -7,5 +7,6 @@
     "**/repos/**": true
   },
   "oxc.configPath": ".oxlintrc.json",
-  "oxc.fmt.configPath": ".oxfmtrc.json"
+  "oxc.fmt.configPath": ".oxfmtrc.json",
+  "editor.fontLigatures": true
 }
