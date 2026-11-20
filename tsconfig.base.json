@@ -1,5 +1,14 @@
 {
   "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "ignoreEffectWarningsInTscExitCode": true,
+        "diagnosticSeverity": {
+          "unstableApiUsage": "off"
+        }
+      }
+    ],
     "target": "ES2023",
     "lib": ["ES2023"],
     "module": "NodeNext",

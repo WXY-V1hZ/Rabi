@@ -22,9 +22,11 @@
     "rabi": "pnpm --filter executor cli"
   },
   "devDependencies": {
+    "@effect/tsgo": "0.70.0",
     "husky": "^9.1.7",
     "oxfmt": "^0.78.0",
-    "oxlint": "^1.93.0"
+    "oxlint": "^1.93.0",
+    "typescript": "7.0.2"
   },
   "devEngines": {
     "packageManager": {
