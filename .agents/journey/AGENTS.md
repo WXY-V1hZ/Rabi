@@ -8,5 +8,5 @@
 - 用户确认验收后，在原任务文档记录结果，将 `NEXT` 提升为 `CURRENT`，将 `NEXT` 指向用户选定的下一项。
 - 暂缓补充项或替换 `NEXT` 时，在 [BACKLOG.md](BACKLOG.md) 用自然语言记录任务名称、待解决的行为、暂缓原因和恢复条件。恢复已有任务时复用原文档。
 
-- [CURRENT](20261121/001-login-http.md)
-- [NEXT](20261121/002-device-approval.md)
+- [CURRENT](20261121/002-device-approval.md)
+- NEXT 待用户选定。
