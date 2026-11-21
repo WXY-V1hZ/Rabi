@@ -17,7 +17,7 @@
 - 若采用 Better Auth，优先评估 OAuth Provider 与 Device Authorization 集成签发限定权限和资源范围的 access token；不能将独立设备插件返回的用户 session token 直接用作 Executor 专用凭据。逐实例绑定与撤销仍需 Rabi 实现并验证。
 - 临时授权申请在创建时尚未归属账号；Server 校验网页登录身份与明确的批准操作后，才能确定绑定的 Rabi 用户。已登录用户可直接确认，未登录用户先完成 Rabi 登录，登录方式对 CLI 透明。
 - 用户批准后，为对应 Executor 建立账号归属并签发独立、可撤销的专用凭据。网页登录会话与 Executor 凭据分别管理，退出网页登录不隐式撤销 Executor 授权。
-- 账号登录方式、设备授权端点路径、申请有效期、Executor 凭据有效期、是否使用 refresh token 及轮换策略待定；讨论中的路径、时长和响应示例不作为既定接口。
+- 本地开发的设备授权契约见 [`RabiApi`](../../packages/protocol/src/http/index.ts)。对外端点路径、申请有效期、账号登录方式、Executor 凭据有效期及续期策略待定。
 
 ## 身份与连接管理
 
