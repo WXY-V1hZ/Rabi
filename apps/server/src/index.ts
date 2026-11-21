@@ -5,8 +5,12 @@ import { HttpApiBuilder } from "effect/http-api";
 import { createServer } from "node:http";
 import { RabiApi } from "protocol";
 import { LoginHandlers } from "./login.ts";
+import { AuthRoutes } from "./auth.ts";
 
-const routes = HttpApiBuilder.layer(RabiApi).pipe(Layer.provide(LoginHandlers));
+const routes = Layer.mergeAll(
+  HttpApiBuilder.layer(RabiApi).pipe(Layer.provide(LoginHandlers)),
+  AuthRoutes,
+);
 
 const server = HttpRouter.serve(routes).pipe(
   Layer.provide(
