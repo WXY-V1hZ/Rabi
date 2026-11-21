@@ -8,7 +8,6 @@
   "author": "",
   "type": "module",
   "scripts": {
-    "dev": "pnpm -r --parallel --if-present run dev",
     "build": "pnpm -r --if-present run build",
     "clean": "pnpm -r exec node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && pnpm --filter ./apps/web exec tsc -b --clean",
     "typecheck": "pnpm build:type && pnpm -r --if-present run typecheck",
@@ -19,7 +18,8 @@
     "check": "pnpm fmt && pnpm lint && pnpm typecheck",
     "prepare": "husky",
     "build:type": "pnpm --filter protocol build",
-    "rabi": "pnpm --filter executor cli"
+    "rabi": "pnpm --filter executor cli",
+    "serve": "pnpm --filter server dev"
   },
   "devDependencies": {
     "@effect/tsgo": "0.70.0",

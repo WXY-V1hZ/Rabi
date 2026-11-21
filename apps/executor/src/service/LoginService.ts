@@ -98,7 +98,7 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
               },
             })
             .pipe(Effect.timeout("10 seconds"), Effect.result);
-          // 循环请求
+          // 轮询
           while (true) {
             yield* Effect.sleep(Duration.seconds(interval));
             const result = yield* attempt;
