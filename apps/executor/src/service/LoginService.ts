@@ -1,6 +1,7 @@
 import {
   Cause,
   Context,
+  Data,
   Duration,
   Effect,
   Layer,
@@ -10,6 +11,40 @@ import {
 import { HttpClient, HttpClientError } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { DeviceCodeGrant, RabiApi } from "protocol";
+
+class DeviceAuthorizationRequestFailed extends Data.TaggedError(
+  "DeviceAuthorizationRequestFailed",
+)<{
+  readonly cause: Redacted.Redacted<unknown>;
+}> {
+  override readonly message = "设备授权申请失败";
+}
+
+class DeviceAuthorizationDenied extends Data.TaggedError(
+  "DeviceAuthorizationDenied",
+) {
+  override readonly message = "用户拒绝了设备授权";
+}
+
+class DeviceAuthorizationExpired extends Data.TaggedError(
+  "DeviceAuthorizationExpired",
+) {
+  override readonly message = "设备授权已过期，请重新运行 rabi login";
+}
+
+class DeviceTokenExchangeFailed extends Data.TaggedError(
+  "DeviceTokenExchangeFailed",
+)<{
+  readonly cause: Redacted.Redacted<unknown>;
+}> {
+  override readonly message = "领取 Executor 凭据失败";
+}
+
+type LoginError =
+  | DeviceAuthorizationRequestFailed
+  | DeviceAuthorizationDenied
+  | DeviceAuthorizationExpired
+  | DeviceTokenExchangeFailed;
 
 export interface AuthorizationPrompt {
   readonly verificationUri: string;
@@ -25,7 +60,7 @@ export class LoginService extends Context.Service<
      */
     login(
       showAuthorization: (prompt: AuthorizationPrompt) => Effect.Effect<void>,
-    ): Effect.Effect<string, Error>;
+    ): Effect.Effect<string, LoginError>;
   }
 >()("LoginService") {}
 
@@ -84,13 +119,13 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
                 interval += 5;
                 continue;
               case "access_denied":
-                return yield* Effect.fail(new Error("用户拒绝了设备授权"));
+                return yield* new DeviceAuthorizationDenied();
               case "expired_token":
-                return yield* Effect.fail(
-                  new Error("设备授权已过期，请重新运行 rabi login"),
-                );
+                return yield* new DeviceAuthorizationExpired();
               default:
-                return yield* Effect.fail(new Error("领取 Executor 凭据失败"));
+                return yield* new DeviceTokenExchangeFailed({
+                  cause: Redacted.make(error),
+                });
             }
           }
         });
@@ -100,7 +135,14 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
             // 发送请求
             const authorization = yield* api.login
               .requestDeviceCode({ payload: { clientId } })
-              .pipe(Effect.mapError(() => new Error("设备授权申请失败")));
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new DeviceAuthorizationRequestFailed({
+                      cause: Redacted.make(cause),
+                    }),
+                ),
+              );
             // 打印输出
             yield* showAuthorization({
               verificationUri: authorization.verificationUri.href,
@@ -113,10 +155,7 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
             ).pipe(
               Effect.timeoutOrElse({
                 duration: Duration.seconds(authorization.expiresIn),
-                orElse: () =>
-                  Effect.fail(
-                    new Error("设备授权已过期，请重新运行 rabi login"),
-                  ),
+                orElse: () => Effect.fail(new DeviceAuthorizationExpired()),
               }),
             );
             return token.executorId;

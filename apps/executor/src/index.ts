@@ -5,11 +5,6 @@ import { login } from "./cli/login.ts";
 import { makeLoginLayer } from "./service/LoginService.ts";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
-const rabi = Command.make("rabi").pipe(
-  Command.withDescription("Rabi 本地执行器"),
-  Command.withSubcommands([login]),
-);
-
 const authFixture = {
   device_code: "test-device-code",
   user_code: "RABI-1234",
@@ -58,6 +53,11 @@ const demoLoginLayer = makeLoginLayer(
 ).pipe(Layer.provide(mockHttpLayer));
 
 const mainLayer = Layer.mergeAll(NodeServices.layer, demoLoginLayer);
+
+const rabi = Command.make("rabi").pipe(
+  Command.withDescription("Rabi 本地执行器"),
+  Command.withSubcommands([login]),
+);
 
 const main = Command.run(rabi, {
   version: "0.1.0",
