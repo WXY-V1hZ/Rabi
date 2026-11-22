@@ -9,13 +9,16 @@ import { OAuthHandlers } from "./handlers/oauth.ts";
 import { loadServerEnv } from "./loadEnv.ts";
 import { AuthService } from "./services/AuthService.ts";
 import { OAuthService } from "./services/OAuthService.ts";
+import { DeviceHandlers } from "./handlers/device.ts";
 
 loadServerEnv();
 
 const handlers = Layer.mergeAll(
-  HttpApiBuilder.layer(RabiApi).pipe(Layer.provide(OAuthHandlers)),
-  AuthHandlers.pipe(Layer.provide(AuthService.layer)),
-).pipe(Layer.provide(OAuthService.layer));
+  HttpApiBuilder.layer(RabiApi).pipe(
+    Layer.provide(Layer.mergeAll(OAuthHandlers, DeviceHandlers)),
+  ),
+  AuthHandlers,
+).pipe(Layer.provide(Layer.mergeAll(AuthService.layer, OAuthService.layer)));
 
 const server = HttpRouter.serve(handlers).pipe(
   Layer.provide(

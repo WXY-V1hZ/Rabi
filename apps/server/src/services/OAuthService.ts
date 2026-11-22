@@ -5,28 +5,60 @@ const supportedClientId = "rabi-cli";
 const authorizationLifetime = Duration.seconds(60);
 const pollingInterval = Duration.seconds(1);
 
-interface PendingAuthorization {
+interface DeviceAuthorization {
   readonly clientId: string;
   readonly userCode: string;
   readonly expiresAt: DateTime.Utc;
+  readonly status: "pending" | "denied";
 }
 
 const makeOAuthService = Effect.sync(() => {
-  const pending = new Map<string, PendingAuthorization>();
+  const authorizations = new Map<string, DeviceAuthorization>();
+
+  const findByUserCode = (userCode: string) => {
+    for (const entry of authorizations) {
+      if (entry[1].userCode === userCode) return entry;
+    }
+  };
+
+  const makeUserCode = () => {
+    const code = randomBytes(4).toString("hex").toUpperCase();
+    return `${code.slice(0, 4)}-${code.slice(4)}`;
+  };
+
+  const denyDeviceAuthorization = Effect.fnUntraced(function* (
+    userCode: string,
+  ) {
+    const now = yield* DateTime.now;
+    const entry = findByUserCode(userCode);
+    if (entry === undefined) {
+      return yield* Effect.fail("authorization_not_found" as const);
+    }
+
+    const [deviceCode, authorization] = entry;
+    if (DateTime.isGreaterThanOrEqualTo(now, authorization.expiresAt)) {
+      return yield* Effect.fail("authorization_not_found" as const);
+    }
+
+    authorizations.set(deviceCode, { ...authorization, status: "denied" });
+  });
 
   const requestDeviceCode = Effect.fnUntraced(function* (clientId: string) {
     if (clientId !== supportedClientId) {
       return yield* Effect.fail("invalid_client" as const);
     }
 
-    const deviceCode = randomBytes(32).toString("base64url");
-    const userCodeText = randomBytes(4).toString("hex").toUpperCase();
-    const userCode = `${userCodeText.slice(0, 4)}-${userCodeText.slice(4)}`;
     const now = yield* DateTime.now;
-    pending.set(deviceCode, {
+    const deviceCode = randomBytes(32).toString("base64url");
+    let userCode = makeUserCode();
+    while (findByUserCode(userCode) !== undefined) {
+      userCode = makeUserCode();
+    }
+    authorizations.set(deviceCode, {
       clientId,
       userCode,
       expiresAt: DateTime.addDuration(now, authorizationLifetime),
+      status: "pending",
     });
 
     return {
@@ -43,21 +75,25 @@ const makeOAuthService = Effect.sync(() => {
   ) {
     const now = yield* DateTime.now;
     const code = Redacted.value(deviceCode);
-    const authorization = pending.get(code);
+    const authorization = authorizations.get(code);
 
     if (authorization === undefined || authorization.clientId !== clientId) {
       return yield* Effect.fail("invalid_grant" as const);
     }
 
     if (DateTime.isGreaterThanOrEqualTo(now, authorization.expiresAt)) {
-      pending.delete(code);
+      authorizations.delete(code);
       return yield* Effect.fail("expired_token" as const);
     }
 
-    return yield* Effect.fail("authorization_pending" as const);
+    const error =
+      authorization.status === "denied"
+        ? "access_denied"
+        : "authorization_pending";
+    return yield* Effect.fail(error);
   });
 
-  return { requestDeviceCode, exchangeDeviceCode };
+  return { requestDeviceCode, exchangeDeviceCode, denyDeviceAuthorization };
 });
 
 export class OAuthService extends Context.Service<OAuthService>()(
