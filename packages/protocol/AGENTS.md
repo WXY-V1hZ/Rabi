@@ -2,6 +2,13 @@
 
 本文件记录已确定的设计，按任务逐步实现。交互语义见[全局架构](../../docs/ARCHITECTURE.md#跨模块约定)，连接接管与恢复语义见 [Server 设计](../../apps/server/AGENTS.md)。
 
+## 目录结构
+
+- `src/index.ts` 是包的公开入口，具名导出跨包调用所需的契约和常量。
+- `src/http/` 按 HttpApi 分组组织端点。每个端点文件声明一个请求的方法、路径、输入、成功响应和错误响应，并只导出对应端点。各级 `index.ts` 分别组装端点组和完整的 `RabiApi`。
+- Executor 的 OAuth 设备授权端点放在 `src/http/oauth/`，组标识为 `oauth`。
+- 多个端点共用的协议结构放在 `src/http/` 之外按协议命名的模块，例如 `src/oauth.ts`。端点文件引用共享结构，并声明自己的 HTTP 状态码等约束。
+
 ## 边界与校验
 
 - 本包承载 HTTP 契约、SSE 运行事件、Executor 消息与运行时 Effect Schema，从 Schema 推导 TypeScript 类型，供发送端与接收端共用；HTTP 接口使用 HttpApi 描述。

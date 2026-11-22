@@ -40,29 +40,29 @@ class DeviceTokenExchangeFailed extends Data.TaggedError(
   override readonly message = "领取 Executor 凭据失败";
 }
 
-type LoginError =
+type DeviceAuthorizationError =
   | DeviceAuthorizationRequestFailed
   | DeviceAuthorizationDenied
   | DeviceAuthorizationExpired
   | DeviceTokenExchangeFailed;
 
-export interface AuthorizationPrompt {
+interface AuthorizationPrompt {
   readonly verificationUri: string;
   readonly userCode: string;
 }
 
-export class LoginService extends Context.Service<
-  LoginService,
+export class OAuthService extends Context.Service<
+  OAuthService,
   {
     /**
-     * @param showAuthorization 外部回调，向用户展示授权网址和登录码
+     * @param showAuthorization 外部回调，向用户展示授权网址和用户码
      * @returns executorId
      */
-    login(
+    authorize(
       showAuthorization: (prompt: AuthorizationPrompt) => Effect.Effect<void>,
-    ): Effect.Effect<string, LoginError>;
+    ): Effect.Effect<string, DeviceAuthorizationError>;
   }
->()("LoginService") {}
+>()("OAuthService") {}
 
 const isPollingTimeout = (error: unknown): boolean => {
   if (Cause.isTimeoutError(error)) return true;
@@ -74,9 +74,9 @@ const isPollingTimeout = (error: unknown): boolean => {
   );
 };
 
-export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
+export const makeOAuthLayer = (serverUrl: URL, clientId: string) =>
   Layer.effect(
-    LoginService,
+    OAuthService,
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       const api = yield* HttpApiClient.makeWith(RabiApi, {
@@ -89,7 +89,7 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
       ) =>
         Effect.gen(function* () {
           let interval = initialInterval;
-          const attempt = api.login
+          const attempt = api.oauth
             .exchangeDeviceCode({
               payload: {
                 grantType: DeviceCodeGrant,
@@ -98,15 +98,11 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
               },
             })
             .pipe(Effect.timeout("10 seconds"), Effect.result);
-          // 轮询
           while (true) {
             yield* Effect.sleep(Duration.seconds(interval));
             const result = yield* attempt;
-            // 成功直接返回
             if (Result.isSuccess(result)) return result.success;
-            // 失败
             const error = result.failure;
-            // 指数退避
             if (isPollingTimeout(error)) {
               interval *= 2;
               continue;
@@ -129,11 +125,10 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
             }
           }
         });
-      return LoginService.of({
-        login: (showAuthorization) =>
+      return OAuthService.of({
+        authorize: (showAuthorization) =>
           Effect.gen(function* () {
-            // 发送请求
-            const authorization = yield* api.login
+            const authorization = yield* api.oauth
               .requestDeviceCode({ payload: { clientId } })
               .pipe(
                 Effect.mapError(
@@ -143,12 +138,10 @@ export const makeLoginLayer = (serverUrl: URL, clientId: string) =>
                     }),
                 ),
               );
-            // 打印输出
             yield* showAuthorization({
               verificationUri: authorization.verificationUri.href,
               userCode: authorization.userCode,
             });
-            // 轮询获取token
             const token = yield* pollForToken(
               authorization.deviceCode,
               authorization.interval ?? 5,

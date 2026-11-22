@@ -16,3 +16,5 @@
 2026-11-22 · Server 将 Better Auth 的账号与会话存储切换到 PostgreSQL，提供本地 Compose 配置和 `pnpm --filter server db:migrate` 迁移入口。用户已确认本地库有四张认证表，`pnpm build` 通过。原会话 Cookie 在 Server 重启后能否继续识别同一账号，待验收。
 
 2026-11-22 · Server 从配置读取数据库地址、签名密钥和认证公开地址。真实 PostgreSQL 集成测试验证重新创建认证路由和连接池后，原会话 Cookie 仍能查询同一账号。Server 两项测试通过。
+
+2026-11-22 · 区分网页登录与 Executor 的 OAuth 设备授权，统一协议组、路由和服务命名。CLI 继续使用 `rabi login`。Server、Executor 和 Protocol 的源码类型检查及 lint 通过。

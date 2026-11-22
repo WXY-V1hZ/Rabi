@@ -4,19 +4,19 @@ import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
 import { TestClock } from "effect/testing";
 import { DeviceCodeGrant, RabiApi } from "protocol";
-import { LoginHandlers } from "../src/login.ts";
+import { OAuthHandlers } from "../src/routes/oauth.ts";
 
-const testLayer = Layer.mergeAll(LoginHandlers, HttpServer.layerServices);
+const testLayer = Layer.mergeAll(OAuthHandlers, HttpServer.layerServices);
 
 it.effect("设备码在声明的有效期结束时过期", () => {
   return Effect.gen(function* () {
-    const client = yield* HttpApiTest.groups(RabiApi, ["login"]);
+    const client = yield* HttpApiTest.groups(RabiApi, ["oauth"]);
     const clientId = "rabi-cli";
-    const authorization = yield* client.login.requestDeviceCode({
+    const authorization = yield* client.oauth.requestDeviceCode({
       payload: { clientId },
     });
 
-    const poll = client.login.exchangeDeviceCode({
+    const poll = client.oauth.exchangeDeviceCode({
       payload: {
         clientId,
         deviceCode: authorization.deviceCode,

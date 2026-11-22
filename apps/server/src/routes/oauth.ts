@@ -14,9 +14,9 @@ interface PendingAuthorization {
   readonly expiresAt: DateTime.Utc;
 }
 
-export const LoginHandlers = HttpApiBuilder.group(
+export const OAuthHandlers = HttpApiBuilder.group(
   RabiApi,
-  "login",
+  "oauth",
   (handlers) => {
     const pending = new Map<string, PendingAuthorization>();
     return handlers.handleAll({

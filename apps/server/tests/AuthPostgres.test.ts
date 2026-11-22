@@ -6,7 +6,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { expect, test } from "vitest";
-import { AuthRoutes } from "../src/auth.ts";
+import { AuthRoutes } from "../src/routes/auth.ts";
 
 const postgresUrl = process.env.TEST_POSTGRES_URL;
 const origin = "http://rabi.test";

@@ -2,9 +2,16 @@
 
 本文件记录已确定的设计，按任务逐步实现。身份、会话绑定和并发约定见[全局架构](../../docs/ARCHITECTURE.md#跨模块约定)。
 
+## 目录结构
+
+- `src/index.ts` 装配服务和 Layer，并启动 HTTP Server。`src/routes/` 放 HTTP 处理器和路由适配，每个模块公开装配所需的路由或处理器 Layer。
+- `src/routes/auth.ts` 接入用户认证，`src/routes/oauth.ts` 实现 Executor 的 OAuth 设备授权。
+- `src/auth/` 放认证配置和可供运行时与工具共用的认证代码。
+- `src/db/schema/` 放 Drizzle 表、索引和关系定义。包根目录的 `db/` 放数据库工具配置与迁移文件。
+
 ## 程序组织与资源生命周期
 
-- HTTP 入口采用 Effect HTTP，业务操作表达为 Effect，服务实现与 Layer 在启动入口装配；HTTP 契约与跨端 Schema 从 `packages/protocol` 引用。
+- HTTP 入口采用 Effect HTTP，业务操作表达为 Effect。HTTP 契约与跨端 Schema 从 `packages/protocol` 引用。
 - 数据库池及运行管理器属于应用作用域；请求、SSE 订阅、Executor 连接和 Agent 运行分别管理作用域。HTTP 请求或浏览器订阅结束不取消已发起的运行，取消由显式业务操作处理。
 - 数据库模型、事务及数据访问服务留在 Server 内部；按业务操作划定事务，数据库失败不转换为成功空结果。连接池随应用关闭释放，不照搬 Worker 的每请求建池方式。
 - Pi 的 Promise、事件和取消接口通过适配层接入；传播取消并清理监听器，预期错误与程序缺陷分别处理。Effect 内存任务不替代运行持久化与恢复协议。

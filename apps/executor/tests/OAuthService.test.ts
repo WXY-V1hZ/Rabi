@@ -2,13 +2,9 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Fiber, Layer } from "effect";
 import { HttpClient, HttpServerResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import {
-  type AuthorizationPrompt,
-  LoginService,
-  makeLoginLayer,
-} from "../src/service/LoginService.ts";
+import { makeOAuthLayer, OAuthService } from "../src/services/OAuthService.ts";
 
-const startLogin = (
+const startAuthorization = (
   tokenResponses: readonly HttpServerResponse.HttpServerResponse[],
 ) => {
   return Effect.gen(function* () {
@@ -28,7 +24,7 @@ const startLogin = (
       }),
     ];
     const requests: string[] = [];
-    const prompts: AuthorizationPrompt[] = [];
+    const prompts: unknown[] = [];
     const httpClient = HttpClient.make((request, url) =>
       Effect.gen(function* () {
         const exchange = exchanges.shift();
@@ -45,18 +41,18 @@ const startLogin = (
         });
       }),
     );
-    const loginLayer = makeLoginLayer(
+    const oauthLayer = makeOAuthLayer(
       new URL("https://rabi.example.test"),
       "rabi-cli",
     ).pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)));
     const fiber = yield* Effect.gen(function* () {
-      const service = yield* LoginService;
-      return yield* service.login((prompt) => {
+      const service = yield* OAuthService;
+      return yield* service.authorize((prompt) => {
         return Effect.sync(() => {
           prompts.push(prompt);
         });
       });
-    }).pipe(Effect.provide(loginLayer), Effect.forkChild);
+    }).pipe(Effect.provide(oauthLayer), Effect.forkChild);
 
     return { fiber, requests, prompts };
   });
@@ -67,7 +63,7 @@ it.effect.each([
   { pollingError: "slow_down", retryDelayMs: 6000 },
 ])("$pollingError 后按要求继续轮询", ({ pollingError, retryDelayMs }) =>
   Effect.gen(function* () {
-    const { fiber, requests, prompts } = yield* startLogin([
+    const { fiber, requests, prompts } = yield* startAuthorization([
       HttpServerResponse.jsonUnsafe({ error: pollingError }, { status: 400 }),
       HttpServerResponse.jsonUnsafe({
         access_token: "test-access-token",
@@ -96,7 +92,7 @@ it.effect.each([
 
 it.effect("用户拒绝授权后停止轮询", () => {
   return Effect.gen(function* () {
-    const { fiber, requests } = yield* startLogin([
+    const { fiber, requests } = yield* startAuthorization([
       HttpServerResponse.jsonUnsafe(
         { error: "access_denied" },
         { status: 400 },

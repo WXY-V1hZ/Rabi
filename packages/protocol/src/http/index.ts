@@ -1,4 +1,4 @@
 import { HttpApi } from "effect/http-api";
-import { LoginGroup } from "./login/index.ts";
+import { OAuthGroup } from "./oauth/index.ts";
 
-export const RabiApi = HttpApi.make("rabi").add(LoginGroup);
+export const RabiApi = HttpApi.make("rabi").add(OAuthGroup);

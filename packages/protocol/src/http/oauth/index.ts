@@ -2,6 +2,6 @@ import { HttpApiGroup } from "effect/http-api";
 import { exchangeDeviceCode } from "./ExchangeDeviceCode.ts";
 import { requestDeviceCode } from "./RequestDeviceCode.ts";
 
-export const LoginGroup = HttpApiGroup.make("login")
+export const OAuthGroup = HttpApiGroup.make("oauth")
   .add(requestDeviceCode)
   .add(exchangeDeviceCode);

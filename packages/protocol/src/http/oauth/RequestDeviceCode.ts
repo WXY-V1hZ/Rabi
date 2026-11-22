@@ -1,6 +1,7 @@
 import { Schema } from "effect";
-import { snakeCaseKeys } from "../../utils.ts";
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api";
+import { OAuthErrorBody } from "../../oauth.ts";
+import { snakeCaseKeys } from "../../utils.ts";
 
 const Request = snakeCaseKeys({
   clientId: Schema.NonEmptyString,
@@ -16,18 +17,12 @@ const SuccessResponse = snakeCaseKeys({
   interval: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
 });
 
-export const OAuthErrorResponse = snakeCaseKeys({
-  error: Schema.NonEmptyString,
-  errorDescription: Schema.optionalKey(Schema.String),
-  errorUri: Schema.optionalKey(Schema.String),
-}).pipe(HttpApiSchema.status(400));
-
 export const requestDeviceCode = HttpApiEndpoint.post(
   "requestDeviceCode",
   "/oauth/device/code",
   {
     payload: Request,
     success: SuccessResponse,
-    error: OAuthErrorResponse,
+    error: OAuthErrorBody.pipe(HttpApiSchema.status(400)),
   },
 );

@@ -4,18 +4,14 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Config, Effect, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Pool } from "pg";
-import * as authSchema from "./auth-schema.ts";
-import type { BetterAuthOptions } from "better-auth";
+import { authOptions } from "../auth/options.ts";
+import * as authSchema from "../db/schema/auth.ts";
 
 const AuthConfig = Config.all({
   databaseUrl: Config.Redacted("DATABASE_URL"),
   secret: Config.Redacted("BETTER_AUTH_SECRET"),
   publicUrl: Config.URL("BETTER_AUTH_URL"),
 });
-
-export const authOptions = {
-  emailAndPassword: { enabled: true },
-} satisfies BetterAuthOptions;
 
 export const AuthRoutes = Layer.unwrap(
   Effect.gen(function* () {

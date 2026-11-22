@@ -1,12 +1,12 @@
 import { Console, Effect } from "effect";
 import { CliError, Command } from "effect/cli";
-import { LoginService } from "../service/LoginService.ts";
+import { OAuthService } from "../services/OAuthService.ts";
 
 export const login = Command.make("login", {}, () => {
   return Effect.gen(function* () {
-    const loginService = yield* LoginService;
-    const executorId = yield* loginService
-      .login((prompt) =>
+    const oauthService = yield* OAuthService;
+    const executorId = yield* oauthService
+      .authorize((prompt) =>
         Effect.gen(function* () {
           yield* Console.log(prompt.verificationUri);
           yield* Console.log(prompt.userCode);

@@ -1,8 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api";
+import { DeviceCodeGrant, OAuthErrorBody } from "../../oauth.ts";
 import { snakeCaseKeys } from "../../utils.ts";
-import { OAuthErrorResponse } from "./RequestDeviceCode.ts";
-import { DeviceCodeGrant } from "../../constants.ts";
 
 const Request = snakeCaseKeys({
   grantType: Schema.Literal(DeviceCodeGrant),
@@ -24,6 +23,6 @@ export const exchangeDeviceCode = HttpApiEndpoint.post(
   {
     payload: Request,
     success: SuccessResponse,
-    error: OAuthErrorResponse,
+    error: OAuthErrorBody.pipe(HttpApiSchema.status(400)),
   },
 );

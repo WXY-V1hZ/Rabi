@@ -35,7 +35,7 @@ Server 初期作为常驻的模块化单体部署，在进程内划分账号、�
 
 用户从本地完成账号绑定与执行范围授权后，同账号下的 Client 才能看到和选用该 Executor。每个 Executor 使用独立、可撤销的连接凭据，`executorId` 仅用于标识；连接凭据与 Client 的用户登录凭据分开。
 
-Executor 由 CLI 和 daemon 组成。CLI 负责登录、绑定与本地配置，daemon 负责连接 Server 与执行工具，由平台服务管理器托管并配置开机自启。两者以对应的本地用户身份运行；凭据检查、登录后启动及多实例配置规则见 [Executor 设计](../apps/executor/AGENTS.md)。
+Executor 由 CLI 和 daemon 组成。CLI 负责发起 OAuth 设备授权、绑定 Executor 和管理本地配置。daemon 负责连接 Server 与执行工具，由平台服务管理器托管并配置开机自启。两者以对应的本地用户身份运行。凭据检查、绑定后启动及多实例配置规则见 [Executor 设计](../apps/executor/AGENTS.md)。
 
 Server 通过已有 WSS 双向连接下发工具请求并接收结果，无需主动连接私人设备。连接使用 Ping/Pong 心跳与断线重连；同一 `executorId` 同时只有一条有效连接。Client 选用 Executor 表示绑定已有执行端，不触发新的物理连接；Client 关闭不影响 daemon 的连接。
 

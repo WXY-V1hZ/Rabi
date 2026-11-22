@@ -4,11 +4,11 @@ import { HttpRouter } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { createServer } from "node:http";
 import { RabiApi } from "protocol";
-import { LoginHandlers } from "./login.ts";
-import { AuthRoutes } from "./auth.ts";
+import { AuthRoutes } from "./routes/auth.ts";
+import { OAuthHandlers } from "./routes/oauth.ts";
 
 const routes = Layer.mergeAll(
-  HttpApiBuilder.layer(RabiApi).pipe(Layer.provide(LoginHandlers)),
+  HttpApiBuilder.layer(RabiApi).pipe(Layer.provide(OAuthHandlers)),
   AuthRoutes,
 );
 

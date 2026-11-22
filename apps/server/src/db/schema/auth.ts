@@ -1,4 +1,4 @@
-// pnpm dlx auth@1.7.27 generate --config ./db/auth.config.ts --adapter drizzle --dialect postgresql --output ./src/auth-schema.ts
+// pnpm dlx auth@1.7.27 generate --config ./db/auth.config.ts --adapter drizzle --dialect postgresql --output ./src/db/schema/auth.ts
 import { relations } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 
