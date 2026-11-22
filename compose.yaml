@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:18
+    environment:
+      POSTGRES_DB: rabi
+      POSTGRES_USER: rabi
+      POSTGRES_PASSWORD: rabi_dev
+    ports:
+      - "127.0.0.1:${RABI_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "rabi", "-d", "rabi"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  postgres-data:

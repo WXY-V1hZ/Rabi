@@ -12,3 +12,5 @@
 ## 提交记录
 
 2026-11-22 · Server 接入 Better Auth 的邮箱注册、登录和会话查询接口，使用内存适配器进行本地验证。`pnpm build` 通过。
+
+2026-11-22 · Server 将 Better Auth 的账号与会话存储切换到 PostgreSQL，提供本地 Compose 配置和 `pnpm --filter server db:migrate` 迁移入口。用户已确认本地库有四张认证表，`pnpm build` 通过。原会话 Cookie 在 Server 重启后能否继续识别同一账号，待验收。

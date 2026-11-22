@@ -9,22 +9,27 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts --dev",
+    "dev": "tsx watch --env-file=.env src/index.ts --dev",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:migrate": "drizzle-kit migrate --config=./db/drizzle.config.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^1.5.2",
     "@earendil-works/pi-ai": "^1.5.2",
     "@effect/platform-node": "4.1.4",
     "better-auth": "^1.7.27",
+    "drizzle-orm": "0.45.2",
     "effect": "4.1.4",
+    "pg": "^8.23.1",
     "protocol": "workspace:*"
   },
   "devDependencies": {
     "@effect/vitest": "4.1.4",
     "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "~0.31.11",
     "tsx": "^4.23.15",
     "typescript": "7.0.2",
     "vitest": "^5.1.0"
