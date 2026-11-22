@@ -4,12 +4,13 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Config, Context, Effect, Layer, Redacted } from "effect";
 import { Pool } from "pg";
 import { authOptions } from "../auth/options.ts";
+import { BetterAuthSecret, DatabaseUrl, PublicUrl } from "../config.ts";
 import * as authSchema from "../db/schema/auth.ts";
 
 const AuthConfig = Config.all({
-  databaseUrl: Config.Redacted("DATABASE_URL"),
-  secret: Config.Redacted("BETTER_AUTH_SECRET"),
-  publicUrl: Config.URL("BETTER_AUTH_URL"),
+  databaseUrl: DatabaseUrl,
+  secret: BetterAuthSecret,
+  publicUrl: PublicUrl,
 });
 
 const makeAuth = Effect.gen(function* () {
