@@ -20,3 +20,5 @@
 2026-11-22 · 区分网页登录与 Executor 的 OAuth 设备授权，统一协议组、路由和服务命名。CLI 继续使用 `rabi login`。Server、Executor 和 Protocol 的源码类型检查及 lint 通过。
 
 2026-11-22 · Server 将网页登录身份查询和设备授权申请分别集中到 `AuthService` 与 `OAuthService`，Executor 统一 OAuth 服务的 Layer 装配。补充集成测试断言，覆盖有效 Cookie 对应的用户 ID 和匿名请求。Server、Executor 类型检查及仓库 lint、格式检查通过，PostgreSQL 集成测试待运行。
+
+2026-11-22 · Server 启动、Drizzle 迁移和 Vitest 统一读取 `apps/server/.env`，保留进程环境变量的优先级。`pnpm build` 通过，已验证三个入口读取配置，Vitest 无需手动导出变量即可收集 PostgreSQL 集成用例。

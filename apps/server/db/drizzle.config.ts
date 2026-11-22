@@ -1,10 +1,7 @@
-import { existsSync } from "node:fs";
-import { loadEnvFile } from "node:process";
 import { defineConfig } from "drizzle-kit";
+import { loadServerEnv } from "../src/loadEnv.ts";
 
-if (!process.env.DATABASE_URL && existsSync(".env")) {
-  loadEnvFile(".env");
-}
+loadServerEnv();
 
 const url = process.env.DATABASE_URL;
 
