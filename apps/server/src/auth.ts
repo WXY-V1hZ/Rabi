@@ -5,12 +5,21 @@ import { Config, Effect, Layer, Redacted } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Pool } from "pg";
 import * as authSchema from "./auth-schema.ts";
-import { authOptions } from "./auth-options.ts";
+import type { BetterAuthOptions } from "better-auth";
+
+const AuthConfig = Config.all({
+  databaseUrl: Config.Redacted("DATABASE_URL"),
+  secret: Config.Redacted("BETTER_AUTH_SECRET"),
+  publicUrl: Config.URL("BETTER_AUTH_URL"),
+});
+
+export const authOptions = {
+  emailAndPassword: { enabled: true },
+} satisfies BetterAuthOptions;
 
 export const AuthRoutes = Layer.unwrap(
   Effect.gen(function* () {
-    const databaseUrl = yield* Config.Redacted("DATABASE_URL");
-    const secret = yield* Config.Redacted("BETTER_AUTH_SECRET");
+    const { databaseUrl, secret, publicUrl } = yield* AuthConfig;
     const pool = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const pool = new Pool({
@@ -26,6 +35,7 @@ export const AuthRoutes = Layer.unwrap(
     const db = drizzle({ client: pool, schema: authSchema });
     const auth = betterAuth({
       ...authOptions,
+      baseURL: publicUrl.origin,
       secret: Redacted.value(secret),
       database: drizzleAdapter(db, {
         provider: "pg",
