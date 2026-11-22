@@ -4,8 +4,8 @@
 
 ## 目录结构
 
-- `src/index.ts` 装配服务和 Layer，并启动 HTTP Server。`src/routes/` 放 HTTP 处理器和路由适配，每个模块公开装配所需的路由或处理器 Layer。
-- `src/routes/auth.ts` 接入用户认证，`src/routes/oauth.ts` 实现 Executor 的 OAuth 设备授权。
+- `src/index.ts` 装配服务和 Layer，并启动 HTTP Server。`src/handlers/` 放 HTTP 处理器和路由适配，每个模块公开装配所需的处理器 Layer。
+- `src/handlers/auth.ts` 接入用户认证，`src/handlers/oauth.ts` 适配设备授权的 OAuth 端点。授权申请及其状态由 `src/services/OAuthService.ts` 管理。
 - `src/auth/` 放认证配置和可供运行时与工具共用的认证代码。
 - `src/db/schema/` 放 Drizzle 表、索引和关系定义。包根目录的 `db/` 放数据库工具配置与迁移文件。
 

@@ -1,12 +1,15 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { ConfigProvider, Layer, Schema } from "effect";
+import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { expect, test } from "vitest";
-import { AuthRoutes } from "../src/routes/auth.ts";
+import { AuthHandlers } from "../src/handlers/auth.ts";
+import { AuthService } from "../src/services/AuthService.ts";
+
+const authHandlers = AuthHandlers.pipe(Layer.provide(AuthService.layer));
 
 const postgresUrl = process.env.TEST_POSTGRES_URL;
 const origin = "http://rabi.test";
@@ -18,11 +21,11 @@ const readRegisteredUser = Schema.decodeUnknownSync(
   Schema.Struct({ user: Schema.Struct({ id: Schema.String }) }),
 );
 
-async function requestWithFreshRoutes(
-  routes: typeof AuthRoutes,
+async function requestWithFreshHandlers(
+  handlers: typeof authHandlers,
   request: Request,
 ) {
-  const app = HttpRouter.toWebHandler(routes, { disableLogger: true });
+  const app = HttpRouter.toWebHandler(handlers, { disableLogger: true });
   try {
     const response = await app.handler(request);
     return {
@@ -36,7 +39,7 @@ async function requestWithFreshRoutes(
 }
 
 test.runIf(Boolean(postgresUrl))(
-  "认证路由重建后，原会话 Cookie 仍能查到同一个用户",
+  "认证处理器重建后，原会话 Cookie 仍能查到同一个用户",
   { timeout: 30_000 },
   async () => {
     if (!postgresUrl) throw new Error("TEST_POSTGRES_URL is required");
@@ -64,10 +67,10 @@ test.runIf(Boolean(postgresUrl))(
             BETTER_AUTH_URL: origin,
           }),
         );
-        const routes = AuthRoutes.pipe(Layer.provide(config));
+        const handlers = authHandlers.pipe(Layer.provide(config));
 
-        const registration = await requestWithFreshRoutes(
-          routes,
+        const registration = await requestWithFreshHandlers(
+          handlers,
           new Request(`${origin}/api/auth/sign-up/email`, {
             method: "POST",
             headers: { origin, "content-type": "application/json" },
@@ -85,8 +88,8 @@ test.runIf(Boolean(postgresUrl))(
           .join("; ");
         expect(cookie).not.toBe("");
 
-        const session = await requestWithFreshRoutes(
-          routes,
+        const session = await requestWithFreshHandlers(
+          handlers,
           new Request(
             `${origin}/api/auth/get-session?disableCookieCache=true`,
             {
@@ -99,6 +102,19 @@ test.runIf(Boolean(postgresUrl))(
           user: { id: user.id },
           session: { userId: user.id },
         });
+
+        const [signedInUserId, anonymousUserId] = await AuthService.use(
+          (auth) =>
+            Effect.all([
+              auth.getUserId(new Headers({ cookie })),
+              auth.getUserId(new Headers()),
+            ]),
+        ).pipe(
+          Effect.provide(AuthService.layer.pipe(Layer.provide(config))),
+          Effect.runPromise,
+        );
+        expect(signedInUserId).toBe(user.id);
+        expect(anonymousUserId).toBeNull();
       } finally {
         await admin.query(`DROP DATABASE ${databaseName}`);
       }

@@ -2,10 +2,10 @@ import { Command } from "effect/cli";
 import { Effect, Layer } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { login } from "./cli/login.ts";
-import { makeOAuthLayer } from "./services/OAuthService.ts";
+import { OAuthService } from "./services/OAuthService.ts";
 import { FetchHttpClient } from "effect/http";
 
-const oauthLayer = makeOAuthLayer(
+const oauthLayer = OAuthService.layer(
   new URL("http://127.0.0.1:3000"),
   "rabi-cli",
 ).pipe(Layer.provide(FetchHttpClient.layer));

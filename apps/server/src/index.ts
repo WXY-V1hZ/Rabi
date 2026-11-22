@@ -4,15 +4,17 @@ import { HttpRouter } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { createServer } from "node:http";
 import { RabiApi } from "protocol";
-import { AuthRoutes } from "./routes/auth.ts";
-import { OAuthHandlers } from "./routes/oauth.ts";
+import { AuthHandlers } from "./handlers/auth.ts";
+import { OAuthHandlers } from "./handlers/oauth.ts";
+import { AuthService } from "./services/AuthService.ts";
+import { OAuthService } from "./services/OAuthService.ts";
 
-const routes = Layer.mergeAll(
+const handlers = Layer.mergeAll(
   HttpApiBuilder.layer(RabiApi).pipe(Layer.provide(OAuthHandlers)),
-  AuthRoutes,
-);
+  AuthHandlers.pipe(Layer.provide(AuthService.layer)),
+).pipe(Layer.provide(OAuthService.layer));
 
-const server = HttpRouter.serve(routes).pipe(
+const server = HttpRouter.serve(handlers).pipe(
   Layer.provide(
     NodeHttpServer.layer(createServer, { host: "127.0.0.1", port: 3000 }),
   ),

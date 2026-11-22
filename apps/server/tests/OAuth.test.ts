@@ -4,9 +4,12 @@ import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
 import { TestClock } from "effect/testing";
 import { DeviceCodeGrant, RabiApi } from "protocol";
-import { OAuthHandlers } from "../src/routes/oauth.ts";
+import { OAuthHandlers } from "../src/handlers/oauth.ts";
+import { OAuthService } from "../src/services/OAuthService.ts";
 
-const testLayer = Layer.mergeAll(OAuthHandlers, HttpServer.layerServices);
+const testLayer = Layer.mergeAll(OAuthHandlers, HttpServer.layerServices).pipe(
+  Layer.provide(OAuthService.layer),
+);
 
 it.effect("设备码在声明的有效期结束时过期", () => {
   return Effect.gen(function* () {

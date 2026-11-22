@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Fiber, Layer } from "effect";
 import { HttpClient, HttpServerResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { makeOAuthLayer, OAuthService } from "../src/services/OAuthService.ts";
+import { OAuthService } from "../src/services/OAuthService.ts";
 
 const startAuthorization = (
   tokenResponses: readonly HttpServerResponse.HttpServerResponse[],
@@ -41,7 +41,7 @@ const startAuthorization = (
         });
       }),
     );
-    const oauthLayer = makeOAuthLayer(
+    const oauthLayer = OAuthService.layer(
       new URL("https://rabi.example.test"),
       "rabi-cli",
     ).pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)));
