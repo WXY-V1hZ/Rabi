@@ -8,6 +8,7 @@
   },
   "oxc.configPath": ".oxlintrc.json",
   "oxc.fmt.configPath": ".oxfmtrc.json",
+  "editor.defaultFormatter": "oxc.oxc-vscode",
   "explorer.sortOrder": "type",
   "js/ts.experimental.useTsgo": true,
   "js/ts.tsdk.path": "./node_modules/typescript/bin",
