@@ -15,6 +15,7 @@ export const denyDeviceAuthorization = HttpApiEndpoint.post(
       HttpApiError.Forbidden,
       HttpApiError.Unauthorized,
       HttpApiError.NotFound,
+      HttpApiError.Conflict,
       HttpApiError.InternalServerError,
     ],
   },

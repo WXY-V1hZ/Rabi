@@ -5,12 +5,15 @@ const supportedClientId = "rabi-cli";
 const authorizationLifetime = Duration.seconds(60);
 const pollingInterval = Duration.seconds(1);
 
-interface DeviceAuthorization {
+type DeviceDecision =
+  | { readonly status: "denied" }
+  | { readonly status: "approved"; readonly userId: string };
+
+type DeviceAuthorization = {
   readonly clientId: string;
   readonly userCode: string;
   readonly expiresAt: DateTime.Utc;
-  readonly status: "pending" | "denied";
-}
+} & ({ readonly status: "pending" } | DeviceDecision);
 
 const makeOAuthService = Effect.sync(() => {
   const authorizations = new Map<string, DeviceAuthorization>();
@@ -26,8 +29,9 @@ const makeOAuthService = Effect.sync(() => {
     return `${code.slice(0, 4)}-${code.slice(4)}`;
   };
 
-  const denyDeviceAuthorization = Effect.fnUntraced(function* (
+  const decideDeviceAuthorization = Effect.fnUntraced(function* (
     userCode: string,
+    decision: DeviceDecision,
   ) {
     const now = yield* DateTime.now;
     const entry = findByUserCode(userCode);
@@ -40,8 +44,18 @@ const makeOAuthService = Effect.sync(() => {
       return yield* Effect.fail("authorization_not_found" as const);
     }
 
-    authorizations.set(deviceCode, { ...authorization, status: "denied" });
+    if (authorization.status !== "pending") {
+      return yield* Effect.fail("authorization_already_decided" as const);
+    }
+
+    authorizations.set(deviceCode, { ...authorization, ...decision });
   });
+
+  const approveDeviceAuthorization = (userCode: string, userId: string) =>
+    decideDeviceAuthorization(userCode, { status: "approved", userId });
+
+  const denyDeviceAuthorization = (userCode: string) =>
+    decideDeviceAuthorization(userCode, { status: "denied" });
 
   const requestDeviceCode = Effect.fnUntraced(function* (clientId: string) {
     if (clientId !== supportedClientId) {
@@ -93,7 +107,12 @@ const makeOAuthService = Effect.sync(() => {
     return yield* Effect.fail(error);
   });
 
-  return { requestDeviceCode, exchangeDeviceCode, denyDeviceAuthorization };
+  return {
+    requestDeviceCode,
+    exchangeDeviceCode,
+    denyDeviceAuthorization,
+    approveDeviceAuthorization,
+  };
 });
 
 export class OAuthService extends Context.Service<OAuthService>()(

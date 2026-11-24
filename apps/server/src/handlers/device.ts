@@ -14,27 +14,44 @@ export const DeviceHandlers = HttpApiBuilder.group(
       const oauth = yield* OAuthService;
       const allowedOrigin = (yield* PublicUrl).origin;
 
-      return handlers.handle(
-        "denyDeviceAuthorization",
-        ({ request, payload }) =>
-          Effect.gen(function* () {
-            if (request.headers.origin !== allowedOrigin) {
-              return yield* new HttpApiError.Forbidden();
-            }
+      const decide = (
+        headers: Headers,
+        userCode: string,
+        action: "approve" | "deny",
+      ) =>
+        Effect.gen(function* () {
+          if (headers.get("origin") !== allowedOrigin) {
+            return yield* new HttpApiError.Forbidden();
+          }
 
-            const userId = yield* auth
-              .getUserId(new Headers(request.headers))
-              .pipe(
-                Effect.mapError(() => new HttpApiError.InternalServerError()),
-              );
-            if (userId === null) {
-              return yield* new HttpApiError.Unauthorized();
-            }
+          const userId = yield* auth
+            .getUserId(headers)
+            .pipe(
+              Effect.mapError(() => new HttpApiError.InternalServerError()),
+            );
+          if (userId === null) {
+            return yield* new HttpApiError.Unauthorized();
+          }
 
-            yield* oauth
-              .denyDeviceAuthorization(payload.userCode)
-              .pipe(Effect.mapError(() => new HttpApiError.NotFound()));
-          }),
-      );
+          const decision =
+            action === "approve"
+              ? oauth.approveDeviceAuthorization(userCode, userId)
+              : oauth.denyDeviceAuthorization(userCode);
+
+          yield* decision.pipe(
+            Effect.mapError((error) =>
+              error === "authorization_already_decided"
+                ? new HttpApiError.Conflict()
+                : new HttpApiError.NotFound(),
+            ),
+          );
+        });
+
+      return handlers.handleAll({
+        approveDeviceAuthorization: ({ request, payload }) =>
+          decide(new Headers(request.headers), payload.userCode, "approve"),
+        denyDeviceAuthorization: ({ request, payload }) =>
+          decide(new Headers(request.headers), payload.userCode, "deny"),
+      });
     }),
 );
