@@ -4,7 +4,8 @@
 
 ## 目录结构
 
-- `src/index.ts` 是包的公开入口，具名导出跨包调用所需的契约和常量。
+- `src/index.ts` 是主入口，具名导出跨包调用所需的契约和常量。
+- `protocol/errors` 是 Server 和 Executor 共用的 `BaseError` 子路径。错误字段与用法见 [Effect 错误处理](../../docs/CODING_STANDARDS.md#effect-错误处理)。
 - `src/http/` 按 HttpApi 分组组织端点。每个端点文件声明一个请求的方法、路径、输入、成功响应和错误响应，并只导出对应端点。各级 `index.ts` 分别组装端点组和完整的 `RabiApi`。
 - Executor 的 OAuth 设备授权端点放在 `src/http/oauth/`，组标识为 `oauth`。
 - 多个端点共用的协议结构放在 `src/http/` 之外按协议命名的模块，例如 `src/oauth.ts`。端点文件引用共享结构，并声明自己的 HTTP 状态码等约束。

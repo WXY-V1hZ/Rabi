@@ -1,5 +1,13 @@
-import { expect, it, vi } from "@effect/vitest";
-import { ConfigProvider, Duration, Effect, Layer, Schema } from "effect";
+import { expect, it } from "@effect/vitest";
+import {
+  ConfigProvider,
+  Duration,
+  Effect,
+  Layer,
+  Logger,
+  Redacted,
+  Schema,
+} from "effect";
 import {
   HttpRouter,
   HttpServer,
@@ -8,7 +16,9 @@ import {
 } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { TestClock } from "effect/testing";
+import { inspect } from "node:util";
 import { DeviceCodeGrant, RabiApi } from "protocol";
+import { vi } from "vitest";
 import { DeviceHandlers } from "../src/handlers/device.ts";
 import { OAuthHandlers } from "../src/handlers/oauth.ts";
 import { AuthService } from "../src/services/AuthService.ts";
@@ -16,14 +26,35 @@ import { OAuthService } from "../src/services/OAuthService.ts";
 
 const origin = "http://rabi.test";
 const sessionCookie = "session=test-session";
+const unavailableSessionCookie = "session=unavailable-session";
+const originalErrorMessage = "测试用的底层数据库诊断详情";
+const lookupFailure = new Error(originalErrorMessage);
 const userId = "signed-in-user";
 const clientId = "rabi-cli";
 
-const authLayer = Layer.succeed(AuthService, {
-  handle: () => Effect.die("本测试只使用 AuthService.getUserId"),
-  getUserId: (headers) =>
-    Effect.succeed(headers.get("cookie") === sessionCookie ? userId : null),
-});
+vi.mock("better-auth", () => ({
+  betterAuth: () => ({
+    api: {
+      getSession: ({ headers }: { headers: Headers }) => {
+        const cookie = headers.get("cookie");
+        if (cookie === unavailableSessionCookie) {
+          return Promise.reject(lookupFailure);
+        }
+        return Promise.resolve(
+          cookie === sessionCookie ? { user: { id: userId } } : null,
+        );
+      },
+    },
+  }),
+}));
+
+const configLayer = ConfigProvider.layer(
+  ConfigProvider.fromUnknown({
+    BETTER_AUTH_URL: origin,
+    BETTER_AUTH_SECRET: "test-secret-for-device-authorization-fixture",
+    DATABASE_URL: "postgresql://test:test@127.0.0.1:5432/rabi_test",
+  }),
+);
 
 const readDeviceCode = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -38,13 +69,9 @@ const setup = Effect.gen(function* () {
   const approve = vi.spyOn(oauth, "approveDeviceAuthorization");
   const handlers = Layer.mergeAll(DeviceHandlers, OAuthHandlers).pipe(
     Layer.provide(
-      Layer.mergeAll(authLayer, Layer.succeed(OAuthService, oauth)),
+      Layer.mergeAll(AuthService.layer, Layer.succeed(OAuthService, oauth)),
     ),
-    Layer.provide(
-      ConfigProvider.layer(
-        ConfigProvider.fromUnknown({ BETTER_AUTH_URL: origin }),
-      ),
-    ),
+    Layer.provide(configLayer),
   );
   const app = HttpApiBuilder.layer(RabiApi).pipe(
     Layer.provide(Layer.mergeAll(handlers, HttpServer.layerServices)),
@@ -144,6 +171,53 @@ it.effect("来源不符或缺少登录会话时，不会批准申请", () =>
     expect((yield* decide("approve", userCode, { origin })).status).toBe(401);
     expect(approve).not.toHaveBeenCalled();
     expect((yield* decide("approve", userCode)).status).toBe(204);
+  }),
+);
+
+it.effect("会话查询失败保留经过遮蔽的原始错误", () =>
+  Effect.gen(function* () {
+    const error = yield* AuthService.use((auth) =>
+      auth.getUserId(new Headers({ cookie: unavailableSessionCookie })),
+    ).pipe(
+      Effect.flip,
+      Effect.provide(AuthService.layer.pipe(Layer.provide(configLayer))),
+    );
+
+    expect(error._tag).toBe("SessionLookupFailed");
+    const cause = error.cause;
+    if (!Redacted.isRedacted(cause)) {
+      return yield* Effect.die(new Error("会话查询错误应遮蔽原始原因"));
+    }
+    expect(Redacted.value(cause)).toBe(lookupFailure);
+    expect(JSON.stringify(error)).toContain("<redacted>");
+    expect(inspect(error)).not.toContain(originalErrorMessage);
+  }),
+);
+
+it.effect("会话查询失败返回通用 500，并记录一次安全诊断", () =>
+  Effect.gen(function* () {
+    const { approve, requestDeviceCode, decide } = yield* setup;
+    const { user_code: userCode } = yield* requestDeviceCode;
+    const diagnostics: Array<unknown> = [];
+    const logger = Logger.make(({ logLevel, message }) => {
+      if (logLevel === "Error") diagnostics.push(message);
+    });
+
+    const response = yield* decide("approve", userCode, {
+      origin,
+      cookie: unavailableSessionCookie,
+    }).pipe(Effect.provide(Logger.layer([logger])));
+    const body = yield* Effect.promise(() => response.text());
+
+    expect(response.status).toBe(500);
+    expect(body).not.toContain(originalErrorMessage);
+    expect(body).not.toContain("SessionLookupFailed");
+    expect(approve).not.toHaveBeenCalled();
+    expect(diagnostics).toHaveLength(1);
+    const renderedDiagnostics = inspect(diagnostics);
+    expect(renderedDiagnostics).toContain("SessionLookupFailed");
+    expect(renderedDiagnostics).toContain("读取登录会话失败");
+    expect(renderedDiagnostics).not.toContain(originalErrorMessage);
   }),
 );
 

@@ -27,7 +27,7 @@ Server 初期作为常驻的模块化单体部署，在进程内划分账号、�
 | [apps/server](../apps/server/AGENTS.md)             | 身份与连接管理、Agent 运行、任务调度及断线恢复  |
 | [apps/executor](../apps/executor/AGENTS.md)         | CLI 与 daemon、本地凭据、服务生命周期及工具执行 |
 | [apps/web](../apps/web/AGENTS.md)                   | Executor 选择、会话操作与运行状态展示           |
-| [packages/protocol](../packages/protocol/AGENTS.md) | 跨端消息、运行时校验及调用关联                  |
+| [packages/protocol](../packages/protocol/AGENTS.md) | 跨端消息、运行时校验、调用关联及共享错误基类    |
 
 ## 跨模块约定
 

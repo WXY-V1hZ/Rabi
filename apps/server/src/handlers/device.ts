@@ -24,11 +24,18 @@ export const DeviceHandlers = HttpApiBuilder.group(
             return yield* new HttpApiError.Forbidden();
           }
 
-          const userId = yield* auth
-            .getUserId(headers)
-            .pipe(
-              Effect.mapError(() => new HttpApiError.InternalServerError()),
-            );
+          const userId = yield* auth.getUserId(headers).pipe(
+            Effect.catchTag("SessionLookupFailed", (error) =>
+              Effect.logError({
+                _tag: error._tag,
+                message: error.message,
+              }).pipe(
+                Effect.andThen(
+                  Effect.fail(new HttpApiError.InternalServerError()),
+                ),
+              ),
+            ),
+          );
           if (userId === null) {
             return yield* new HttpApiError.Unauthorized();
           }

@@ -23,6 +23,7 @@
 - Server 承担 Rabi 设备授权服务器的职责，云端提供申请授权、网页确认和领取令牌的接口；协议遵循 [RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)，字段与凭据语义见[共享协议](../../packages/protocol/AGENTS.md#设备授权)。
 - 若采用 Better Auth，优先评估 OAuth Provider 与 Device Authorization 集成签发限定权限和资源范围的 access token；不能将独立设备插件返回的用户 session token 直接用作 Executor 专用凭据。逐实例绑定与撤销仍需 Rabi 实现并验证。
 - 临时授权申请在创建时尚未归属账号；Server 校验网页登录身份与明确的批准操作后，才能确定绑定的 Rabi 用户。已登录用户可直接确认，未登录用户先完成 Rabi 登录，登录方式对 CLI 透明。
+- 设备授权服务将等待授权作为正常状态返回。OAuth handler 将该状态映射为 `authorization_pending`。
 - 用户批准后，为对应 Executor 建立账号归属并签发独立、可撤销的专用凭据。网页登录会话与 Executor 凭据分别管理，退出网页登录不隐式撤销 Executor 授权。
 - 本地开发的设备授权契约见 [`RabiApi`](../../packages/protocol/src/http/index.ts)。对外端点路径、申请有效期、账号登录方式、Executor 凭据有效期及续期策略待定。
 

@@ -6,6 +6,13 @@ import { Pool } from "pg";
 import { authOptions } from "../auth/options.ts";
 import { BetterAuthSecret, DatabaseUrl, PublicUrl } from "../config.ts";
 import * as authSchema from "../db/schema/auth.ts";
+import { BaseError } from "protocol/errors";
+
+class SessionLookupFailed extends BaseError<"SessionLookupFailed"> {
+  constructor(options: { readonly cause: unknown }) {
+    super("SessionLookupFailed", "读取登录会话失败", options);
+  }
+}
 
 const AuthConfig = Config.all({
   databaseUrl: DatabaseUrl,
@@ -45,12 +52,14 @@ const makeAuth = Effect.gen(function* () {
     handle: (request: Request) =>
       Effect.tryPromise(() => auth.handler(request)),
     getUserId: (headers: Headers) =>
-      Effect.tryPromise(() =>
-        auth.api.getSession({
-          headers,
-          query: { disableCookieCache: true, disableRefresh: true },
-        }),
-      ).pipe(Effect.map((session) => session?.user.id ?? null)),
+      Effect.tryPromise({
+        try: () =>
+          auth.api.getSession({
+            headers,
+            query: { disableCookieCache: true, disableRefresh: true },
+          }),
+        catch: (cause) => new SessionLookupFailed({ cause }),
+      }).pipe(Effect.map((session) => session?.user.id ?? null)),
   };
 });
 
