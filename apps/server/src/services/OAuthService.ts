@@ -1,9 +1,46 @@
 import { Context, DateTime, Duration, Effect, Layer, Redacted } from "effect";
 import { randomBytes } from "node:crypto";
+import { BaseError } from "protocol/errors";
 
 const supportedClientId = "rabi-cli";
 const authorizationLifetime = Duration.seconds(60);
 const pollingInterval = Duration.seconds(1);
+
+class DeviceAuthorizationNotFound extends BaseError<"DeviceAuthorizationNotFound"> {
+  constructor() {
+    super("DeviceAuthorizationNotFound", "设备授权申请不存在或已过期");
+  }
+}
+
+class DeviceAuthorizationAlreadyDecided extends BaseError<"DeviceAuthorizationAlreadyDecided"> {
+  constructor() {
+    super("DeviceAuthorizationAlreadyDecided", "设备授权申请已有决定");
+  }
+}
+
+class UnsupportedOAuthClient extends BaseError<"UnsupportedOAuthClient"> {
+  constructor() {
+    super("UnsupportedOAuthClient", "设备授权客户端不受支持");
+  }
+}
+
+class InvalidDeviceGrant extends BaseError<"InvalidDeviceGrant"> {
+  constructor() {
+    super("InvalidDeviceGrant", "设备码与客户端无法匹配有效授权申请");
+  }
+}
+
+class DeviceAuthorizationExpired extends BaseError<"DeviceAuthorizationExpired"> {
+  constructor() {
+    super("DeviceAuthorizationExpired", "设备授权已过期");
+  }
+}
+
+class DeviceAuthorizationDenied extends BaseError<"DeviceAuthorizationDenied"> {
+  constructor() {
+    super("DeviceAuthorizationDenied", "设备授权已被拒绝");
+  }
+}
 
 type DeviceDecision =
   | { readonly status: "denied" }
@@ -36,16 +73,16 @@ const makeOAuthService = Effect.sync(() => {
     const now = yield* DateTime.now;
     const entry = findByUserCode(userCode);
     if (entry === undefined) {
-      return yield* Effect.fail("authorization_not_found" as const);
+      return yield* new DeviceAuthorizationNotFound();
     }
 
     const [deviceCode, authorization] = entry;
     if (DateTime.isGreaterThanOrEqualTo(now, authorization.expiresAt)) {
-      return yield* Effect.fail("authorization_not_found" as const);
+      return yield* new DeviceAuthorizationNotFound();
     }
 
     if (authorization.status !== "pending") {
-      return yield* Effect.fail("authorization_already_decided" as const);
+      return yield* new DeviceAuthorizationAlreadyDecided();
     }
 
     authorizations.set(deviceCode, { ...authorization, ...decision });
@@ -59,7 +96,7 @@ const makeOAuthService = Effect.sync(() => {
 
   const requestDeviceCode = Effect.fnUntraced(function* (clientId: string) {
     if (clientId !== supportedClientId) {
-      return yield* Effect.fail("invalid_client" as const);
+      return yield* new UnsupportedOAuthClient();
     }
 
     const now = yield* DateTime.now;
@@ -92,19 +129,19 @@ const makeOAuthService = Effect.sync(() => {
     const authorization = authorizations.get(code);
 
     if (authorization === undefined || authorization.clientId !== clientId) {
-      return yield* Effect.fail("invalid_grant" as const);
+      return yield* new InvalidDeviceGrant();
     }
 
     if (DateTime.isGreaterThanOrEqualTo(now, authorization.expiresAt)) {
       authorizations.delete(code);
-      return yield* Effect.fail("expired_token" as const);
+      return yield* new DeviceAuthorizationExpired();
     }
 
-    const error =
-      authorization.status === "denied"
-        ? "access_denied"
-        : "authorization_pending";
-    return yield* Effect.fail(error);
+    if (authorization.status === "denied") {
+      return yield* new DeviceAuthorizationDenied();
+    }
+
+    return { status: "pending" } as const;
   });
 
   return {

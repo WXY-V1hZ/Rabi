@@ -1,7 +1,6 @@
 import {
   Cause,
   Context,
-  Data,
   Duration,
   Effect,
   Layer,
@@ -11,33 +10,30 @@ import {
 import { HttpClient, HttpClientError } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { DeviceCodeGrant, RabiApi } from "protocol";
+import { BaseError } from "protocol/errors";
 
-class DeviceAuthorizationRequestFailed extends Data.TaggedError(
-  "DeviceAuthorizationRequestFailed",
-)<{
-  readonly cause: Redacted.Redacted<unknown>;
-}> {
-  override readonly message = "设备授权申请失败";
+class DeviceAuthorizationRequestFailed extends BaseError<"DeviceAuthorizationRequestFailed"> {
+  constructor(options: { readonly cause: unknown }) {
+    super("DeviceAuthorizationRequestFailed", "设备授权申请失败", options);
+  }
 }
 
-class DeviceAuthorizationDenied extends Data.TaggedError(
-  "DeviceAuthorizationDenied",
-) {
-  override readonly message = "用户拒绝了设备授权";
+class DeviceAuthorizationDenied extends BaseError<"DeviceAuthorizationDenied"> {
+  constructor() {
+    super("DeviceAuthorizationDenied", "用户拒绝了设备授权");
+  }
 }
 
-class DeviceAuthorizationExpired extends Data.TaggedError(
-  "DeviceAuthorizationExpired",
-) {
-  override readonly message = "设备授权已过期，请重新运行 rabi login";
+class DeviceAuthorizationExpired extends BaseError<"DeviceAuthorizationExpired"> {
+  constructor() {
+    super("DeviceAuthorizationExpired", "设备授权已过期");
+  }
 }
 
-class DeviceTokenExchangeFailed extends Data.TaggedError(
-  "DeviceTokenExchangeFailed",
-)<{
-  readonly cause: Redacted.Redacted<unknown>;
-}> {
-  override readonly message = "领取 Executor 凭据失败";
+class DeviceTokenExchangeFailed extends BaseError<"DeviceTokenExchangeFailed"> {
+  constructor(options: { readonly cause: unknown }) {
+    super("DeviceTokenExchangeFailed", "领取 Executor 凭据失败", options);
+  }
 }
 
 interface AuthorizationPrompt {
@@ -100,9 +96,7 @@ const makeOAuthService = Effect.fnUntraced(function* (
         case "expired_token":
           return yield* new DeviceAuthorizationExpired();
         default:
-          return yield* new DeviceTokenExchangeFailed({
-            cause: Redacted.make(error),
-          });
+          return yield* new DeviceTokenExchangeFailed({ cause: error });
       }
     }
   });
@@ -115,10 +109,7 @@ const makeOAuthService = Effect.fnUntraced(function* (
       .requestDeviceCode({ payload: { clientId } })
       .pipe(
         Effect.mapError(
-          (cause) =>
-            new DeviceAuthorizationRequestFailed({
-              cause: Redacted.make(cause),
-            }),
+          (cause) => new DeviceAuthorizationRequestFailed({ cause }),
         ),
       );
     yield* showAuthorization({

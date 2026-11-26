@@ -2,6 +2,13 @@ import { Console, Effect } from "effect";
 import { CliError, Command } from "effect/cli";
 import { OAuthService } from "../services/OAuthService.ts";
 
+const loginErrorMessages = {
+  DeviceAuthorizationRequestFailed: "设备授权申请失败",
+  DeviceAuthorizationDenied: "用户拒绝了设备授权",
+  DeviceAuthorizationExpired: "设备授权已过期，请重新运行 rabi login",
+  DeviceTokenExchangeFailed: "领取 Executor 凭据失败",
+};
+
 export const login = Command.make("login", {}, () => {
   return Effect.gen(function* () {
     const oauthService = yield* OAuthService;
@@ -13,11 +20,16 @@ export const login = Command.make("login", {}, () => {
         }),
       )
       .pipe(
+        Effect.tapErrorTag(
+          ["DeviceAuthorizationRequestFailed", "DeviceTokenExchangeFailed"],
+          (error) =>
+            Effect.logDebug({ _tag: error._tag, message: error.message }),
+        ),
         Effect.mapError(
           (error) =>
             new CliError.UserError({
               cause: error,
-              userMessage: error.message,
+              userMessage: loginErrorMessages[error._tag],
             }),
         ),
       );

@@ -10,7 +10,13 @@ export const AuthHandlers = Layer.unwrap(
         const webRequest = yield* HttpServerRequest.toWeb(request);
         const response = yield* auth.handle(webRequest);
         return HttpServerResponse.fromWeb(response);
-      }),
+      }).pipe(
+        Effect.catchTag("AuthRequestFailed", (error) =>
+          Effect.logError({ _tag: error._tag, message: error.message }).pipe(
+            Effect.as(HttpServerResponse.empty({ status: 500 })),
+          ),
+        ),
+      ),
     );
   }),
 );

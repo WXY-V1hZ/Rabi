@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Duration, Effect, Layer } from "effect";
+import { Duration, Effect, Layer, Redacted } from "effect";
 import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
 import { TestClock } from "effect/testing";
@@ -9,6 +9,43 @@ import { OAuthService } from "../src/services/OAuthService.ts";
 
 const testLayer = Layer.mergeAll(OAuthHandlers, HttpServer.layerServices).pipe(
   Layer.provide(OAuthService.layer),
+);
+
+it.effect("发起授权和轮询时保留 OAuth 的客户端与授权错误码", () =>
+  Effect.gen(function* () {
+    const client = yield* HttpApiTest.groups(RabiApi, ["oauth"]);
+    const unsupported = yield* client.oauth.requestDeviceCode({
+      payload: { clientId: "unsupported-client" },
+      responseMode: "response-only",
+    });
+    expect(unsupported.status).toBe(400);
+    expect(yield* unsupported.json).toEqual({ error: "invalid_client" });
+
+    const invalidGrant = yield* client.oauth.exchangeDeviceCode({
+      payload: {
+        clientId: "rabi-cli",
+        deviceCode: Redacted.make("unissued-device-code"),
+        grantType: DeviceCodeGrant,
+      },
+      responseMode: "response-only",
+    });
+    expect(invalidGrant.status).toBe(400);
+    expect(yield* invalidGrant.json).toEqual({ error: "invalid_grant" });
+  }).pipe(Effect.provide(testLayer)),
+);
+
+it.effect("尚未签发凭据时，设备授权服务返回等待状态", () =>
+  Effect.gen(function* () {
+    const oauth = yield* OAuthService;
+    const clientId = "rabi-cli";
+    const { deviceCode } = yield* oauth.requestDeviceCode(clientId);
+
+    expect(yield* oauth.exchangeDeviceCode(clientId, deviceCode)).toMatchObject(
+      {
+        status: "pending",
+      },
+    );
+  }).pipe(Effect.provide(OAuthService.layer)),
 );
 
 it.effect("设备码在声明的有效期结束时过期", () => {

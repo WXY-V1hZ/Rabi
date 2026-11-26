@@ -24,12 +24,26 @@ export const OAuthHandlers = HttpApiBuilder.group(
                 interval: Duration.toSeconds(pollingInterval),
               }),
             ),
-            Effect.mapError((error) => ({ error })),
+            Effect.catchTag("UnsupportedOAuthClient", () =>
+              Effect.fail({ error: "invalid_client" }),
+            ),
           ),
         exchangeDeviceCode: ({ payload: { clientId, deviceCode } }) =>
-          oauth
-            .exchangeDeviceCode(clientId, deviceCode)
-            .pipe(Effect.mapError((error) => ({ error }))),
+          oauth.exchangeDeviceCode(clientId, deviceCode).pipe(
+            Effect.catchTags({
+              InvalidDeviceGrant: () => Effect.fail({ error: "invalid_grant" }),
+              DeviceAuthorizationExpired: () =>
+                Effect.fail({ error: "expired_token" }),
+              DeviceAuthorizationDenied: () =>
+                Effect.fail({ error: "access_denied" }),
+            }),
+            Effect.flatMap(({ status }) => {
+              switch (status) {
+                case "pending":
+                  return Effect.fail({ error: "authorization_pending" });
+              }
+            }),
+          ),
       });
     }),
 );

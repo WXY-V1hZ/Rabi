@@ -3,14 +3,26 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Config, Context, Effect, Layer, Redacted } from "effect";
 import { Pool } from "pg";
+import { BaseError } from "protocol/errors";
 import { authOptions } from "../auth/options.ts";
 import { BetterAuthSecret, DatabaseUrl, PublicUrl } from "../config.ts";
 import * as authSchema from "../db/schema/auth.ts";
-import { BaseError } from "protocol/errors";
+
+class AuthRequestFailed extends BaseError<"AuthRequestFailed"> {
+  constructor(options: { readonly cause: unknown }) {
+    super("AuthRequestFailed", "处理认证请求失败", options);
+  }
+}
 
 class SessionLookupFailed extends BaseError<"SessionLookupFailed"> {
   constructor(options: { readonly cause: unknown }) {
     super("SessionLookupFailed", "读取登录会话失败", options);
+  }
+}
+
+class IdleDatabaseConnectionFailed extends BaseError<"IdleDatabaseConnectionFailed"> {
+  constructor(options: { readonly cause: unknown }) {
+    super("IdleDatabaseConnectionFailed", "PostgreSQL 空闲连接故障", options);
   }
 }
 
@@ -28,8 +40,9 @@ const makeAuth = Effect.gen(function* () {
       const pool = new Pool({
         connectionString: Redacted.value(databaseUrl),
       });
-      pool.on("error", (error) => {
-        console.error("PostgreSQL idle connection error", error);
+      pool.on("error", (cause) => {
+        const error = new IdleDatabaseConnectionFailed({ cause });
+        console.error({ _tag: error._tag, message: error.message });
       });
       return pool;
     }),
@@ -50,7 +63,10 @@ const makeAuth = Effect.gen(function* () {
 
   return {
     handle: (request: Request) =>
-      Effect.tryPromise(() => auth.handler(request)),
+      Effect.tryPromise({
+        try: () => auth.handler(request),
+        catch: (cause) => new AuthRequestFailed({ cause }),
+      }),
     getUserId: (headers: Headers) =>
       Effect.tryPromise({
         try: () =>

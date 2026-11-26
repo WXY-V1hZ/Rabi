@@ -46,11 +46,12 @@ export const DeviceHandlers = HttpApiBuilder.group(
               : oauth.denyDeviceAuthorization(userCode);
 
           yield* decision.pipe(
-            Effect.mapError((error) =>
-              error === "authorization_already_decided"
-                ? new HttpApiError.Conflict()
-                : new HttpApiError.NotFound(),
-            ),
+            Effect.catchTags({
+              DeviceAuthorizationNotFound: () =>
+                Effect.fail(new HttpApiError.NotFound()),
+              DeviceAuthorizationAlreadyDecided: () =>
+                Effect.fail(new HttpApiError.Conflict()),
+            }),
           );
         });
 
