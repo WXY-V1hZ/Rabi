@@ -2,11 +2,11 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Config, Context, Effect, Layer, Redacted } from "effect";
-import { Pool } from "pg";
 import { BaseError } from "protocol/errors";
 import { authOptions } from "../auth/options.ts";
-import { BetterAuthSecret, DatabaseUrl, PublicUrl } from "../config.ts";
+import { BetterAuthSecret, PublicUrl } from "../config.ts";
 import * as authSchema from "../db/schema/auth.ts";
+import { PostgresPool } from "../db/PostgresPools.ts";
 
 class AuthRequestFailed extends BaseError<"AuthRequestFailed"> {
   constructor(options: { readonly cause: unknown }) {
@@ -20,34 +20,14 @@ class SessionLookupFailed extends BaseError<"SessionLookupFailed"> {
   }
 }
 
-class IdleDatabaseConnectionFailed extends BaseError<"IdleDatabaseConnectionFailed"> {
-  constructor(options: { readonly cause: unknown }) {
-    super("IdleDatabaseConnectionFailed", "PostgreSQL 空闲连接故障", options);
-  }
-}
-
 const AuthConfig = Config.all({
-  databaseUrl: DatabaseUrl,
   secret: BetterAuthSecret,
   publicUrl: PublicUrl,
 });
 
 const makeAuth = Effect.gen(function* () {
-  const { databaseUrl, secret, publicUrl } = yield* AuthConfig;
-
-  const pool = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const pool = new Pool({
-        connectionString: Redacted.value(databaseUrl),
-      });
-      pool.on("error", (cause) => {
-        const error = new IdleDatabaseConnectionFailed({ cause });
-        console.error({ _tag: error._tag, message: error.message });
-      });
-      return pool;
-    }),
-    (pool) => Effect.promise(() => pool.end()),
-  );
+  const pool = yield* PostgresPool;
+  const { secret, publicUrl } = yield* AuthConfig;
 
   const db = drizzle({ client: pool, schema: authSchema });
   const auth = betterAuth({
@@ -83,5 +63,7 @@ export class AuthService extends Context.Service<AuthService>()(
   "server/services/AuthService",
   { make: makeAuth },
 ) {
-  static readonly layer = Layer.effect(AuthService, AuthService.make);
+  static readonly layer = Layer.effect(AuthService, AuthService.make).pipe(
+    Layer.provide(PostgresPool.layer),
+  );
 }

@@ -11,6 +11,7 @@ import { HttpClient, HttpClientError } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { DeviceCodeGrant, RabiApi } from "protocol";
 import { BaseError } from "protocol/errors";
+import { loadExecutorIdentity } from "./ExecutorIdentity.ts";
 
 class DeviceAuthorizationRequestFailed extends BaseError<"DeviceAuthorizationRequestFailed"> {
   constructor(options: { readonly cause: unknown }) {
@@ -105,6 +106,7 @@ const makeOAuthService = Effect.fnUntraced(function* (
   const authorize = Effect.fnUntraced(function* (
     showAuthorization: (prompt: AuthorizationPrompt) => Effect.Effect<void>,
   ) {
+    const executorIdentitySecret = yield* loadExecutorIdentity;
     const authorization = yield* api.oauth
       .requestDeviceCode({ payload: { clientId } })
       .pipe(

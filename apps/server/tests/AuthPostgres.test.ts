@@ -28,6 +28,14 @@ const readRegisteredUser = Schema.decodeUnknownSync(
 const readDeviceAuthorization = Schema.decodeUnknownSync(
   Schema.Struct({ device_code: Schema.String, user_code: Schema.String }),
 );
+const readExecutorCredential = Schema.decodeUnknownSync(
+  Schema.Struct({
+    access_token: Schema.RedactedFromValue(Schema.NonEmptyString),
+    executor_id: Schema.NonEmptyString,
+    expires_in: Schema.Int,
+    token_type: Schema.String,
+  }),
+);
 
 async function requestWithFreshHandlers(
   handlers: typeof authHandlers,
@@ -47,7 +55,7 @@ async function requestWithFreshHandlers(
 }
 
 test.runIf(Boolean(postgresUrl))(
-  "邮箱登录签发的会话 Cookie 可在处理器重建后查询会话与确认设备授权",
+  "邮箱登录的会话可在处理器重建后查询并批准设备授权，已批准申请只签发一次",
   { timeout: 30_000 },
   async () => {
     if (!postgresUrl) throw new Error("TEST_POSTGRES_URL is required");
@@ -178,7 +186,10 @@ test.runIf(Boolean(postgresUrl))(
           const requestAuthorization = async () => {
             const response = await post(
               "/oauth/device/code",
-              new URLSearchParams({ client_id: "rabi-cli" }),
+              new URLSearchParams({
+                client_id: "rabi-cli",
+                executor_identity_secret: randomBytes(32).toString("base64url"),
+              }),
             );
             expect(response.status).toBe(200);
             return readDeviceAuthorization(await response.json());
@@ -204,10 +215,29 @@ test.runIf(Boolean(postgresUrl))(
             );
 
           const approved = await requestAuthorization();
+          const pending = await exchange(approved.device_code);
+          expect(pending.status).toBe(400);
+          expect(await pending.json()).toEqual({
+            error: "authorization_pending",
+          });
           expect((await decide("approve", approved.user_code)).status).toBe(
             204,
           );
           expect((await decide("deny", approved.user_code)).status).toBe(409);
+
+          const exchanges = await Promise.all([
+            exchange(approved.device_code),
+            exchange(approved.device_code),
+          ]);
+          const [first, second] = exchanges.toSorted(
+            (left, right) => left.status - right.status,
+          );
+          expect([first.status, second.status]).toEqual([200, 400]);
+          expect(readExecutorCredential(await first.json())).toMatchObject({
+            token_type: "Bearer",
+            expires_in: 2_592_000,
+          });
+          expect(await second.json()).toEqual({ error: "invalid_grant" });
 
           const denied = await requestAuthorization();
           expect((await decide("deny", denied.user_code)).status).toBe(204);

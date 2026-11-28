@@ -25,13 +25,12 @@
 - 若采用 Better Auth，优先评估 OAuth Provider 与 Device Authorization 集成签发限定权限和资源范围的 access token；不能将独立设备插件返回的用户 session token 直接用作 Executor 专用凭据。逐实例绑定与撤销仍需 Rabi 实现并验证。
 - 临时授权申请在创建时尚未归属账号；Server 校验网页登录身份与明确的批准操作后，才能确定绑定的 Rabi 用户。已登录用户可直接确认，未登录用户先完成 Rabi 登录，登录方式对 CLI 透明。
 - 设备授权服务将等待授权作为正常状态返回。OAuth handler 将该状态映射为 `authorization_pending`。
-- 用户批准后，为对应 Executor 建立账号归属并签发独立、可撤销的专用凭据。网页登录会话与 Executor 凭据分别管理，退出网页登录不隐式撤销 Executor 授权。
-- 首版 Executor 凭据自签发起有效 30 天，到期后由用户重新授权。
+- 用户批准后，Server 为 Executor 签发连接凭据。网页登录会话与 Executor 凭据各自管理生命周期。修改 Executor 注册、凭据管理或解绑时，阅读[数据库设计](DATABASE.md#executor)。
 - 本地开发的设备授权契约见 [`RabiApi`](../../packages/protocol/src/http/index.ts)。对外端点路径、申请有效期和账号登录方式待定。
 
 ## 身份与连接管理
 
-- 分别校验 Client 与 Executor 身份，以及其对会话、运行和执行器的访问权限。Server 管理账号归属、Executor 注册记录和独立连接凭据；用户解绑时使对应凭据与当前连接失效，其他 Executor 不受影响。
+- 分别校验 Client 与 Executor 身份，以及其对会话、运行和执行器的访问权限。用户解绑时使对应凭据与当前连接失效，其他 Executor 不受影响。
 - 按 `executorId` 维护当前有效连接。新连接认证成功后接管旧连接，仅向当前连接下发新请求；旧连接关闭或迟到消息不得清除或覆盖新连接状态，工具结果仍需校验调用归属。
 - 将连接接管通知旧端，使其停止自动重连；接管不代表原工具调用停止，其执行状态独立核对。Executor 侧生命周期见 [Executor 设计](../executor/AGENTS.md#服务与连接生命周期)。
 

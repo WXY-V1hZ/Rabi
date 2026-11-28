@@ -9,7 +9,7 @@ const url = Redacted.value(Effect.runSync(DatabaseUrl));
 
 export default defineConfig({
   dialect: "postgresql",
-  schema: "./src/db/schema/auth.ts",
+  schema: ["./src/db/schema/auth.ts", "./src/db/schema/executor.ts"],
   out: "./db/migrations",
   dbCredentials: { url },
 });
