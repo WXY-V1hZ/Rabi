@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Duration, Effect, Layer, Redacted } from "effect";
+import { ConfigProvider, Duration, Effect, Layer, Redacted } from "effect";
 import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
 import { TestClock } from "effect/testing";
@@ -9,6 +9,22 @@ import { OAuthService } from "../src/services/OAuthService.ts";
 
 const testLayer = Layer.mergeAll(OAuthHandlers, HttpServer.layerServices).pipe(
   Layer.provide(OAuthService.layer),
+  Layer.provide(
+    ConfigProvider.layer(
+      ConfigProvider.fromUnknown({ BETTER_AUTH_URL: "https://rabi.test" }),
+    ),
+  ),
+);
+
+it.effect("设备授权响应使用公开地址生成浏览器链接", () =>
+  Effect.gen(function* () {
+    const client = yield* HttpApiTest.groups(RabiApi, ["oauth"]);
+    const authorization = yield* client.oauth.requestDeviceCode({
+      payload: { clientId: "rabi-cli" },
+    });
+
+    expect(authorization.verificationUri.href).toBe("https://rabi.test/device");
+  }).pipe(Effect.provide(testLayer)),
 );
 
 it.effect("发起授权和轮询时保留 OAuth 的客户端与授权错误码", () =>

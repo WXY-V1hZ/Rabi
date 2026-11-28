@@ -20,7 +20,8 @@
     "prepare": "husky && effect-tsgo patch --typescript",
     "build:type": "pnpm --filter protocol build",
     "rabi": "pnpm --filter executor cli",
-    "serve": "pnpm --filter server dev"
+    "serve": "pnpm --filter server dev",
+    "web": "pnpm --filter web dev"
   },
   "devDependencies": {
     "@effect/tsgo": "0.70.0",

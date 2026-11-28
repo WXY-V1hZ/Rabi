@@ -1,13 +1,18 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
-import { HttpRouter } from "effect/http";
+import { HttpRouter, HttpServer } from "effect/http";
+import { HttpApiBuilder } from "effect/http-api";
 import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
+import { DeviceCodeGrant, RabiApi } from "protocol";
 import { expect, test } from "vitest";
 import { AuthHandlers } from "../src/handlers/auth.ts";
+import { DeviceHandlers } from "../src/handlers/device.ts";
+import { OAuthHandlers } from "../src/handlers/oauth.ts";
 import { AuthService } from "../src/services/AuthService.ts";
+import { OAuthService } from "../src/services/OAuthService.ts";
 
 const authHandlers = AuthHandlers.pipe(Layer.provide(AuthService.layer));
 
@@ -19,6 +24,9 @@ const migrationsFolder = fileURLToPath(
 
 const readRegisteredUser = Schema.decodeUnknownSync(
   Schema.Struct({ user: Schema.Struct({ id: Schema.String }) }),
+);
+const readDeviceAuthorization = Schema.decodeUnknownSync(
+  Schema.Struct({ device_code: Schema.String, user_code: Schema.String }),
 );
 
 async function requestWithFreshHandlers(
@@ -39,7 +47,7 @@ async function requestWithFreshHandlers(
 }
 
 test.runIf(Boolean(postgresUrl))(
-  "认证处理器重建后，原会话 Cookie 仍能查到同一个用户",
+  "邮箱登录签发的会话 Cookie 可在处理器重建后查询会话与确认设备授权",
   { timeout: 30_000 },
   async () => {
     if (!postgresUrl) throw new Error("TEST_POSTGRES_URL is required");
@@ -68,6 +76,8 @@ test.runIf(Boolean(postgresUrl))(
           }),
         );
         const handlers = authHandlers.pipe(Layer.provide(config));
+        const email = "session@example.test";
+        const password = "rabi-test-password";
 
         const registration = await requestWithFreshHandlers(
           handlers,
@@ -76,14 +86,36 @@ test.runIf(Boolean(postgresUrl))(
             headers: { origin, "content-type": "application/json" },
             body: JSON.stringify({
               name: "Rabi Test",
-              email: "session@example.test",
-              password: "rabi-test-password",
+              email,
+              password,
             }),
           }),
         );
         expect(registration.status).toBe(200);
+        expect(registration.cookies).not.toHaveLength(0);
         const { user } = readRegisteredUser(registration.body);
-        const cookie = registration.cookies
+
+        const signIn = (password: string) =>
+          requestWithFreshHandlers(
+            handlers,
+            new Request(`${origin}/api/auth/sign-in/email`, {
+              method: "POST",
+              headers: { origin, "content-type": "application/json" },
+              body: JSON.stringify({ email, password }),
+            }),
+          );
+        expect((await signIn("wrong-password")).status).toBe(401);
+
+        const anonymous = await requestWithFreshHandlers(
+          handlers,
+          new Request(`${origin}/api/auth/get-session`),
+        );
+        expect(anonymous.status).toBe(200);
+        expect(anonymous.body).toBeNull();
+
+        const login = await signIn(password);
+        expect(login.status).toBe(200);
+        const cookie = login.cookies
           .map((header) => header.split(";", 1)[0])
           .join("; ");
         expect(cookie).not.toBe("");
@@ -99,7 +131,7 @@ test.runIf(Boolean(postgresUrl))(
         );
         expect(session.status).toBe(200);
         expect(session.body).toMatchObject({
-          user: { id: user.id },
+          user: { id: user.id, email },
           session: { userId: user.id },
         });
 
@@ -115,6 +147,76 @@ test.runIf(Boolean(postgresUrl))(
         );
         expect(signedInUserId).toBe(user.id);
         expect(anonymousUserId).toBeNull();
+
+        const deviceApp = HttpRouter.toWebHandler(
+          HttpApiBuilder.layer(RabiApi).pipe(
+            Layer.provide(Layer.mergeAll(DeviceHandlers, OAuthHandlers)),
+            Layer.provide(
+              Layer.mergeAll(
+                AuthService.layer,
+                OAuthService.layer,
+                HttpServer.layerServices,
+              ),
+            ),
+            Layer.provide(config),
+          ),
+          { disableLogger: true },
+        );
+        try {
+          const post = (
+            path: string,
+            body: string | URLSearchParams,
+            headers?: Headers,
+          ) =>
+            deviceApp.handler(
+              new Request(`${origin}${path}`, {
+                method: "POST",
+                body,
+                headers,
+              }),
+            );
+          const requestAuthorization = async () => {
+            const response = await post(
+              "/oauth/device/code",
+              new URLSearchParams({ client_id: "rabi-cli" }),
+            );
+            expect(response.status).toBe(200);
+            return readDeviceAuthorization(await response.json());
+          };
+          const decide = (action: "approve" | "deny", userCode: string) =>
+            post(
+              `/api/device/${action}`,
+              JSON.stringify({ userCode }),
+              new Headers({
+                origin,
+                cookie,
+                "content-type": "application/json",
+              }),
+            );
+          const exchange = (deviceCode: string) =>
+            post(
+              "/oauth/token",
+              new URLSearchParams({
+                client_id: "rabi-cli",
+                device_code: deviceCode,
+                grant_type: DeviceCodeGrant,
+              }),
+            );
+
+          const approved = await requestAuthorization();
+          expect((await decide("approve", approved.user_code)).status).toBe(
+            204,
+          );
+          expect((await decide("deny", approved.user_code)).status).toBe(409);
+
+          const denied = await requestAuthorization();
+          expect((await decide("deny", denied.user_code)).status).toBe(204);
+          const token = await exchange(denied.device_code);
+          expect(token.status).toBe(400);
+          expect(await token.json()).toEqual({ error: "access_denied" });
+        } finally {
+          await deviceApp.dispose();
+        }
       } finally {
         await admin.query(`DROP DATABASE ${databaseName}`);
       }

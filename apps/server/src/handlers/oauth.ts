@@ -2,8 +2,7 @@ import { Duration, Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { RabiApi } from "protocol";
 import { OAuthService } from "../services/OAuthService.ts";
-
-const verificationUri = new URL("http://127.0.0.1:3000/device");
+import { PublicUrl } from "../config.ts";
 
 export const OAuthHandlers = HttpApiBuilder.group(
   RabiApi,
@@ -11,6 +10,8 @@ export const OAuthHandlers = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const oauth = yield* OAuthService;
+      const publicUrl = yield* PublicUrl;
+      const verificationUri = new URL("/device", publicUrl);
 
       return handlers.handleAll({
         requestDeviceCode: ({ payload: { clientId } }) =>
