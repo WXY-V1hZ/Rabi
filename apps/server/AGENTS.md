@@ -26,7 +26,8 @@
 - 临时授权申请在创建时尚未归属账号；Server 校验网页登录身份与明确的批准操作后，才能确定绑定的 Rabi 用户。已登录用户可直接确认，未登录用户先完成 Rabi 登录，登录方式对 CLI 透明。
 - 设备授权服务将等待授权作为正常状态返回。OAuth handler 将该状态映射为 `authorization_pending`。
 - 用户批准后，为对应 Executor 建立账号归属并签发独立、可撤销的专用凭据。网页登录会话与 Executor 凭据分别管理，退出网页登录不隐式撤销 Executor 授权。
-- 本地开发的设备授权契约见 [`RabiApi`](../../packages/protocol/src/http/index.ts)。对外端点路径、申请有效期、账号登录方式、Executor 凭据有效期及续期策略待定。
+- 首版 Executor 凭据自签发起有效 30 天，到期后由用户重新授权。
+- 本地开发的设备授权契约见 [`RabiApi`](../../packages/protocol/src/http/index.ts)。对外端点路径、申请有效期和账号登录方式待定。
 
 ## 身份与连接管理
 
