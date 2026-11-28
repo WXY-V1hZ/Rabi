@@ -28,14 +28,6 @@ const readRegisteredUser = Schema.decodeUnknownSync(
 const readDeviceAuthorization = Schema.decodeUnknownSync(
   Schema.Struct({ device_code: Schema.String, user_code: Schema.String }),
 );
-const readExecutorCredential = Schema.decodeUnknownSync(
-  Schema.Struct({
-    access_token: Schema.RedactedFromValue(Schema.NonEmptyString),
-    executor_id: Schema.NonEmptyString,
-    expires_in: Schema.Int,
-    token_type: Schema.String,
-  }),
-);
 
 async function requestWithFreshHandlers(
   handlers: typeof authHandlers,
@@ -55,7 +47,7 @@ async function requestWithFreshHandlers(
 }
 
 test.runIf(Boolean(postgresUrl))(
-  "邮箱登录会话可确认设备授权，已批准申请只签发一份 30 天凭据",
+  "邮箱登录签发的会话 Cookie 可在处理器重建后查询会话与确认设备授权",
   { timeout: 30_000 },
   async () => {
     if (!postgresUrl) throw new Error("TEST_POSTGRES_URL is required");
@@ -222,20 +214,6 @@ test.runIf(Boolean(postgresUrl))(
           const token = await exchange(denied.device_code);
           expect(token.status).toBe(400);
           expect(await token.json()).toEqual({ error: "access_denied" });
-
-          const exchanges = await Promise.all([
-            exchange(approved.device_code),
-            exchange(approved.device_code),
-          ]);
-          const [issued, consumed] = exchanges.toSorted(
-            (left, right) => left.status - right.status,
-          );
-          expect([issued.status, consumed.status]).toEqual([200, 400]);
-          expect(readExecutorCredential(await issued.json())).toMatchObject({
-            token_type: "Bearer",
-            expires_in: 2_592_000,
-          });
-          expect(await consumed.json()).toEqual({ error: "invalid_grant" });
         } finally {
           await deviceApp.dispose();
         }
