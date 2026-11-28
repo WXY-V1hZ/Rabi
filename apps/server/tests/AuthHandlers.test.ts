@@ -6,7 +6,7 @@ import { vi } from "vitest";
 import { AuthHandlers } from "../src/handlers/auth.ts";
 import { AuthService } from "../src/services/AuthService.ts";
 
-const origin = "http://rabi.test";
+const origin = "https://rabi.test";
 const privateDetail = "synthetic auth dependency diagnostic";
 
 vi.mock("better-auth", () => ({

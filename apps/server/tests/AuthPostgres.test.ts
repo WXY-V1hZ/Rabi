@@ -1,9 +1,9 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { ConfigProvider, Effect, Layer, Schema } from "effect";
+import { ConfigProvider, Effect, Layer, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { DeviceCodeGrant, RabiApi } from "protocol";
@@ -12,12 +12,13 @@ import { AuthHandlers } from "../src/handlers/auth.ts";
 import { DeviceHandlers } from "../src/handlers/device.ts";
 import { OAuthHandlers } from "../src/handlers/oauth.ts";
 import { AuthService } from "../src/services/AuthService.ts";
+import { ExecutorRegistration } from "../src/services/ExecutorRegistration.ts";
 import { OAuthService } from "../src/services/OAuthService.ts";
 
 const authHandlers = AuthHandlers.pipe(Layer.provide(AuthService.layer));
 
 const postgresUrl = process.env.TEST_POSTGRES_URL;
-const origin = "http://rabi.test";
+const origin = "https://rabi.test";
 const migrationsFolder = fileURLToPath(
   new URL("../db/migrations/", import.meta.url),
 );
@@ -162,7 +163,9 @@ test.runIf(Boolean(postgresUrl))(
             Layer.provide(
               Layer.mergeAll(
                 AuthService.layer,
-                OAuthService.layer,
+                OAuthService.layer.pipe(
+                  Layer.provide(ExecutorRegistration.layer),
+                ),
                 HttpServer.layerServices,
               ),
             ),
@@ -183,12 +186,14 @@ test.runIf(Boolean(postgresUrl))(
                 headers,
               }),
             );
-          const requestAuthorization = async () => {
+          const requestAuthorization = async (
+            identitySecret = randomBytes(32).toString("base64url"),
+          ) => {
             const response = await post(
               "/oauth/device/code",
               new URLSearchParams({
                 client_id: "rabi-cli",
-                executor_identity_secret: randomBytes(32).toString("base64url"),
+                executor_identity_secret: identitySecret,
               }),
             );
             expect(response.status).toBe(200);
@@ -214,7 +219,8 @@ test.runIf(Boolean(postgresUrl))(
               }),
             );
 
-          const approved = await requestAuthorization();
+          const identitySecret = randomBytes(32).toString("base64url");
+          const approved = await requestAuthorization(identitySecret);
           const pending = await exchange(approved.device_code);
           expect(pending.status).toBe(400);
           expect(await pending.json()).toEqual({
@@ -233,11 +239,38 @@ test.runIf(Boolean(postgresUrl))(
             (left, right) => left.status - right.status,
           );
           expect([first.status, second.status]).toEqual([200, 400]);
-          expect(readExecutorCredential(await first.json())).toMatchObject({
+          expect(first.headers.get("cache-control")).toBe("no-store");
+          expect(first.headers.get("pragma")).toBe("no-cache");
+          const credential = readExecutorCredential(await first.json());
+          expect(credential).toMatchObject({
             token_type: "Bearer",
             expires_in: 2_592_000,
           });
           expect(await second.json()).toEqual({ error: "invalid_grant" });
+
+          const verificationPool = new Pool({
+            connectionString: databaseUrl.href,
+          });
+          try {
+            const { rows } = await verificationPool.query(
+              `SELECT id, user_id, executor_identity_secret_digest, access_token_digest
+               FROM executor`,
+            );
+            expect(rows).toEqual([
+              {
+                id: credential.executor_id,
+                user_id: user.id,
+                executor_identity_secret_digest: createHash("sha256")
+                  .update(identitySecret)
+                  .digest("hex"),
+                access_token_digest: createHash("sha256")
+                  .update(Redacted.value(credential.access_token))
+                  .digest("hex"),
+              },
+            ]);
+          } finally {
+            await verificationPool.end();
+          }
 
           const denied = await requestAuthorization();
           expect((await decide("deny", denied.user_code)).status).toBe(204);

@@ -1,6 +1,7 @@
 import { Context, DateTime, Duration, Effect, Layer, Redacted } from "effect";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { BaseError } from "protocol/errors";
+import { ExecutorRegistration } from "./ExecutorRegistration.ts";
 
 const supportedClientId = "rabi-cli";
 const authorizationLifetime = Duration.seconds(60);
@@ -50,9 +51,15 @@ type DeviceAuthorization = {
   readonly clientId: string;
   readonly userCode: string;
   readonly expiresAt: DateTime.Utc;
-} & ({ readonly status: "pending" } | DeviceDecision);
+  readonly identitySecretDigest: string;
+} & (
+  | { readonly status: "pending" }
+  | DeviceDecision
+  | { readonly status: "consumed" }
+);
 
-const makeOAuthService = Effect.sync(() => {
+const makeOAuthService = Effect.gen(function* () {
+  const registration = yield* ExecutorRegistration;
   const authorizations = new Map<string, DeviceAuthorization>();
 
   const findByUserCode = (userCode: string) => {
@@ -94,12 +101,18 @@ const makeOAuthService = Effect.sync(() => {
   const denyDeviceAuthorization = (userCode: string) =>
     decideDeviceAuthorization(userCode, { status: "denied" });
 
-  const requestDeviceCode = Effect.fnUntraced(function* (clientId: string) {
+  const requestDeviceCode = Effect.fnUntraced(function* (
+    clientId: string,
+    identitySecret: Redacted.Redacted<string>,
+  ) {
     if (clientId !== supportedClientId) {
       return yield* new UnsupportedOAuthClient();
     }
 
     const now = yield* DateTime.now;
+    const identitySecretDigest = createHash("sha256")
+      .update(Redacted.value(identitySecret))
+      .digest("hex");
     const deviceCode = randomBytes(32).toString("base64url");
     let userCode = makeUserCode();
     while (findByUserCode(userCode) !== undefined) {
@@ -108,6 +121,7 @@ const makeOAuthService = Effect.sync(() => {
     authorizations.set(deviceCode, {
       clientId,
       userCode,
+      identitySecretDigest,
       expiresAt: DateTime.addDuration(now, authorizationLifetime),
       status: "pending",
     });
@@ -141,7 +155,21 @@ const makeOAuthService = Effect.sync(() => {
       return yield* new DeviceAuthorizationDenied();
     }
 
-    return { status: "pending" } as const;
+    if (authorization.status === "pending") {
+      return { status: "pending" } as const;
+    }
+
+    if (authorization.status === "consumed") {
+      return yield* new InvalidDeviceGrant();
+    }
+
+    // 在数据库写入前占用设备码。失败时也保留消费状态，因为写入可能已提交。
+    authorizations.set(code, { ...authorization, status: "consumed" });
+    const credential = yield* registration.register({
+      userId: authorization.userId,
+      identitySecretDigest: authorization.identitySecretDigest,
+    });
+    return { status: "issued", ...credential } as const;
   });
 
   return {

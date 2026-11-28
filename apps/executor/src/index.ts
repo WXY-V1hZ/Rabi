@@ -5,10 +5,9 @@ import { login } from "./cli/login.ts";
 import { OAuthService } from "./services/OAuthService.ts";
 import { FetchHttpClient } from "effect/http";
 
-const oauthLayer = OAuthService.layer(
-  new URL("http://127.0.0.1:3000"),
-  "rabi-cli",
-).pipe(Layer.provide(FetchHttpClient.layer));
+const oauthLayer = OAuthService.layer.pipe(
+  Layer.provide(FetchHttpClient.layer),
+);
 
 const mainLayer = Layer.mergeAll(NodeServices.layer, oauthLayer);
 

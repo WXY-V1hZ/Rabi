@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api";
+import { HttpApiEndpoint, HttpApiError, HttpApiSchema } from "effect/http-api";
 import { DeviceCodeGrant, OAuthErrorBody } from "../../oauth.ts";
 import { snakeCaseKeys } from "../../utils.ts";
 
@@ -23,6 +23,9 @@ export const exchangeDeviceCode = HttpApiEndpoint.post(
   {
     payload: Request,
     success: SuccessResponse,
-    error: OAuthErrorBody.pipe(HttpApiSchema.status(400)),
+    error: [
+      OAuthErrorBody.pipe(HttpApiSchema.status(400)),
+      HttpApiError.InternalServerErrorNoContent,
+    ],
   },
 );

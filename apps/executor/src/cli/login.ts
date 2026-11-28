@@ -3,6 +3,7 @@ import { CliError, Command } from "effect/cli";
 import { OAuthService } from "../services/OAuthService.ts";
 
 const loginErrorMessages = {
+  ExecutorIdentityLoadFailed: "读取或创建 Executor 身份密钥失败",
   DeviceAuthorizationRequestFailed: "设备授权申请失败",
   DeviceAuthorizationDenied: "用户拒绝了设备授权",
   DeviceAuthorizationExpired: "设备授权已过期，请重新运行 rabi login",

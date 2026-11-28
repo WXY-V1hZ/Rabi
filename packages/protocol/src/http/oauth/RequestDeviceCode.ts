@@ -5,8 +5,10 @@ import { snakeCaseKeys } from "../../utils.ts";
 
 const Request = snakeCaseKeys({
   clientId: Schema.NonEmptyString,
-  executorIdentitySecret: Schema.RedactedFromValue(
-    Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
+  executorIdentitySecret: Schema.optionalKey(
+    Schema.RedactedFromValue(
+      Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)),
+    ),
   ),
   scope: Schema.optionalKey(Schema.String),
 }).pipe(HttpApiSchema.asFormUrlEncoded());

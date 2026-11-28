@@ -1,16 +1,64 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, Fiber, Layer, Redacted } from "effect";
+import {
+  ConfigProvider,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Redacted,
+} from "effect";
 import { Command } from "effect/cli";
 import { HttpClient, HttpServerResponse } from "effect/http";
 import { TestClock, TestConsole } from "effect/testing";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { login } from "../src/cli/login.ts";
+import { ServerUrl } from "../src/config.ts";
 import { OAuthService } from "../src/services/OAuthService.ts";
 
-const oauthLayerFor = (httpClient: HttpClient.HttpClient) =>
-  OAuthService.layer(new URL("https://rabi.example.test"), "rabi-cli").pipe(
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
+const identitySecret = "A".repeat(43);
+const serverUrl = "https://rabi.example.test";
+
+it.effect("默认使用本机 Server 地址，拒绝远程 HTTP 地址", () =>
+  Effect.gen(function* () {
+    const defaultUrl = yield* ServerUrl.parse(ConfigProvider.fromUnknown({}));
+    expect(defaultUrl.href).toBe("http://127.0.0.1:3000/");
+
+    const error = yield* ServerUrl.parse(
+      ConfigProvider.fromUnknown({
+        RABI_SERVER_URL: "http://rabi.example.test",
+      }),
+    ).pipe(Effect.flip);
+    expect(error._tag).toBe("ConfigError");
+  }),
+);
+
+const oauthLayerFor = Effect.fnUntraced(function* (
+  httpClient: HttpClient.HttpClient,
+) {
+  const directory = yield* Effect.acquireRelease(
+    Effect.promise(() => mkdtemp(join(tmpdir(), "rabi-oauth-"))),
+    (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
   );
+  const identityPath = join(directory, "identity-secret");
+  yield* Effect.promise(() =>
+    writeFile(identityPath, identitySecret, { mode: 0o600 }),
+  );
+
+  return OAuthService.layer.pipe(
+    Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
+    Layer.provide(
+      ConfigProvider.layer(
+        ConfigProvider.fromUnknown({
+          RABI_SERVER_URL: serverUrl,
+          RABI_EXECUTOR_IDENTITY_PATH: identityPath,
+        }),
+      ),
+    ),
+  );
+});
 
 const startAuthorization = (
   tokenResponses: readonly (
@@ -36,6 +84,7 @@ const startAuthorization = (
     ];
     const requests: string[] = [];
     const prompts: unknown[] = [];
+    const shown = yield* Deferred.make<void>();
     const httpClient = HttpClient.make((request, url) =>
       Effect.gen(function* () {
         const exchange = exchanges.shift();
@@ -45,7 +94,18 @@ const startAuthorization = (
           );
         }
         expect(request.method).toBe("POST");
+        expect(url.origin).toBe(serverUrl);
         expect(url.pathname).toBe(exchange.path);
+        if (request.body._tag !== "Uint8Array") {
+          return yield* Effect.die(new Error("预期为表单请求"));
+        }
+        const params = new URLSearchParams(
+          new TextDecoder().decode(request.body.body),
+        );
+        expect(params.get("client_id")).toBe("rabi-cli");
+        expect(params.get("executor_identity_secret")).toBe(
+          exchange.path === "/oauth/device/code" ? identitySecret : null,
+        );
         requests.push(url.pathname);
         if (exchange.response === "timeout") return yield* Effect.never;
         return HttpServerResponse.toClientResponse(exchange.response, {
@@ -53,14 +113,17 @@ const startAuthorization = (
         });
       }),
     );
+    const oauthLayer = yield* oauthLayerFor(httpClient);
     const fiber = yield* Effect.gen(function* () {
       const service = yield* OAuthService;
-      return yield* service.authorize((prompt) => {
-        return Effect.sync(() => {
+      return yield* service.authorize((prompt) =>
+        Effect.gen(function* () {
           prompts.push(prompt);
-        });
-      });
-    }).pipe(Effect.provide(oauthLayerFor(httpClient)), Effect.forkChild);
+          yield* Deferred.succeed(shown, undefined);
+        }),
+      );
+    }).pipe(Effect.provide(oauthLayer), Effect.forkChild);
+    yield* Effect.raceFirst(Deferred.await(shown), Fiber.join(fiber));
 
     return { fiber, requests, prompts };
   });
@@ -180,10 +243,9 @@ it.effect("发起授权失败时，CLI 只输出面向用户的错误提示", ()
         ),
       ),
     );
+    const oauthLayer = yield* oauthLayerFor(httpClient);
     const error = yield* Command.runWith(login, { version: "0.1.0" })([]).pipe(
-      Effect.provide(
-        Layer.mergeAll(NodeServices.layer, oauthLayerFor(httpClient)),
-      ),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, oauthLayer)),
       Effect.flip,
     );
 

@@ -4,7 +4,9 @@
 
 ## 本地开发
 
-首次配置时，将 `apps/server/.env.example` 复制为 `apps/server/.env`，并将 `openssl rand -hex 32` 的输出填入 `BETTER_AUTH_SECRET`。Server 启动、迁移和测试都会读取该文件，同名的进程环境变量优先。
+首次配置时，将 `apps/server/.env.example` 复制为 `apps/server/.env`。Server 启动、迁移和测试都会读取该文件，同名的进程环境变量优先。`DATABASE_URL` 和 `BETTER_AUTH_URL` 默认使用本地 Compose 数据库和 Web 开发地址。
+
+用 `openssl rand -hex 32` 生成 `BETTER_AUTH_SECRET`，填入 `.env` 后，登录会话可以跨 Server 重启使用。本机省略该项时，Server 启动时生成临时密钥，重启后需要重新登录。远程 `BETTER_AUTH_URL` 必须使用 HTTPS，并显式设置 `BETTER_AUTH_SECRET`。
 
 ### 启动 PostgreSQL
 

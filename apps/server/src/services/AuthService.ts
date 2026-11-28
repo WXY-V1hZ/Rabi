@@ -1,10 +1,10 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Config, Context, Effect, Layer, Redacted } from "effect";
+import { Context, Effect, Layer, Redacted } from "effect";
 import { BaseError } from "protocol/errors";
 import { authOptions } from "../auth/options.ts";
-import { BetterAuthSecret, PublicUrl } from "../config.ts";
+import { AuthConfig } from "../config.ts";
 import * as authSchema from "../db/schema/auth.ts";
 import { PostgresPool } from "../db/PostgresPools.ts";
 
@@ -19,11 +19,6 @@ class SessionLookupFailed extends BaseError<"SessionLookupFailed"> {
     super("SessionLookupFailed", "读取登录会话失败", options);
   }
 }
-
-const AuthConfig = Config.all({
-  secret: BetterAuthSecret,
-  publicUrl: PublicUrl,
-});
 
 const makeAuth = Effect.gen(function* () {
   const pool = yield* PostgresPool;

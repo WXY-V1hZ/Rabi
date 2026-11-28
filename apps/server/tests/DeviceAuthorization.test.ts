@@ -22,9 +22,10 @@ import { vi } from "vitest";
 import { DeviceHandlers } from "../src/handlers/device.ts";
 import { OAuthHandlers } from "../src/handlers/oauth.ts";
 import { AuthService } from "../src/services/AuthService.ts";
+import { ExecutorRegistration } from "../src/services/ExecutorRegistration.ts";
 import { OAuthService } from "../src/services/OAuthService.ts";
 
-const origin = "http://rabi.test";
+const origin = "https://rabi.test";
 const sessionCookie = "session=test-session";
 const unavailableSessionCookie = "session=unavailable-session";
 const originalErrorMessage = "测试用的底层数据库诊断详情";
@@ -65,7 +66,11 @@ const readDeviceCode = Schema.decodeUnknownSync(
 );
 
 const setup = Effect.gen(function* () {
-  const oauth = yield* OAuthService.make;
+  const oauth = yield* OAuthService.make.pipe(
+    Effect.provideService(ExecutorRegistration, {
+      register: () => Effect.die(new Error("此用例无需签发凭据")),
+    }),
+  );
   const approve = vi.spyOn(oauth, "approveDeviceAuthorization");
   const handlers = Layer.mergeAll(DeviceHandlers, OAuthHandlers).pipe(
     Layer.provide(
@@ -97,7 +102,10 @@ const setup = Effect.gen(function* () {
   const requestDeviceCode = Effect.gen(function* () {
     const response = yield* post(
       "/oauth/device/code",
-      new URLSearchParams({ client_id: clientId }),
+      new URLSearchParams({
+        client_id: clientId,
+        executor_identity_secret: "A".repeat(43),
+      }),
     );
     expect(response.status).toBe(200);
     return readDeviceCode(yield* Effect.promise(() => response.json()));

@@ -28,7 +28,7 @@ const makeExecutorRegistration = Effect.gen(function* () {
 
   const register = Effect.fnUntraced(function* (input: {
     readonly userId: string;
-    readonly identitySecret: Redacted.Redacted<string>;
+    readonly identitySecretDigest: string;
   }) {
     const now = yield* DateTime.now;
     const expiresAt = DateTime.addDuration(now, credentialLifetime);
@@ -39,9 +39,7 @@ const makeExecutorRegistration = Effect.gen(function* () {
           .insert(executor)
           .values({
             userId: input.userId,
-            executorIdentitySecretDigest: digest(
-              Redacted.value(input.identitySecret),
-            ),
+            executorIdentitySecretDigest: input.identitySecretDigest,
             accessTokenDigest: digest(Redacted.value(accessToken)),
             accessTokenExpiresAt: DateTime.toDateUtc(expiresAt),
           })

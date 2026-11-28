@@ -8,6 +8,7 @@ import { AuthHandlers } from "./handlers/auth.ts";
 import { OAuthHandlers } from "./handlers/oauth.ts";
 import { loadServerEnv } from "./loadEnv.ts";
 import { AuthService } from "./services/AuthService.ts";
+import { ExecutorRegistration } from "./services/ExecutorRegistration.ts";
 import { OAuthService } from "./services/OAuthService.ts";
 import { DeviceHandlers } from "./handlers/device.ts";
 
@@ -18,7 +19,14 @@ const handlers = Layer.mergeAll(
     Layer.provide(Layer.mergeAll(OAuthHandlers, DeviceHandlers)),
   ),
   AuthHandlers,
-).pipe(Layer.provide(Layer.mergeAll(AuthService.layer, OAuthService.layer)));
+).pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      AuthService.layer,
+      OAuthService.layer.pipe(Layer.provide(ExecutorRegistration.layer)),
+    ),
+  ),
+);
 
 const server = HttpRouter.serve(handlers).pipe(
   Layer.provide(

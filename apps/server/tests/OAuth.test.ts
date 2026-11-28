@@ -5,10 +5,20 @@ import { HttpApiTest } from "effect/http-api";
 import { TestClock } from "effect/testing";
 import { DeviceCodeGrant, RabiApi } from "protocol";
 import { OAuthHandlers } from "../src/handlers/oauth.ts";
+import { ExecutorRegistration } from "../src/services/ExecutorRegistration.ts";
 import { OAuthService } from "../src/services/OAuthService.ts";
 
+const executorIdentitySecret = Redacted.make("A".repeat(43));
+const oauthLayer = OAuthService.layer.pipe(
+  Layer.provide(
+    Layer.succeed(ExecutorRegistration, {
+      register: () => Effect.die(new Error("未批准的申请不应触发注册")),
+    }),
+  ),
+);
+
 const testLayer = Layer.mergeAll(OAuthHandlers, HttpServer.layerServices).pipe(
-  Layer.provide(OAuthService.layer),
+  Layer.provide(oauthLayer),
   Layer.provide(
     ConfigProvider.layer(
       ConfigProvider.fromUnknown({ BETTER_AUTH_URL: "https://rabi.test" }),
@@ -20,7 +30,7 @@ it.effect("设备授权响应使用公开地址生成浏览器链接", () =>
   Effect.gen(function* () {
     const client = yield* HttpApiTest.groups(RabiApi, ["oauth"]);
     const authorization = yield* client.oauth.requestDeviceCode({
-      payload: { clientId: "rabi-cli" },
+      payload: { clientId: "rabi-cli", executorIdentitySecret },
     });
 
     expect(authorization.verificationUri.href).toBe("https://rabi.test/device");
@@ -30,8 +40,15 @@ it.effect("设备授权响应使用公开地址生成浏览器链接", () =>
 it.effect("发起授权和轮询时保留 OAuth 的客户端与授权错误码", () =>
   Effect.gen(function* () {
     const client = yield* HttpApiTest.groups(RabiApi, ["oauth"]);
+    const missingIdentity = yield* client.oauth.requestDeviceCode({
+      payload: { clientId: "rabi-cli" },
+      responseMode: "response-only",
+    });
+    expect(missingIdentity.status).toBe(400);
+    expect(yield* missingIdentity.json).toEqual({ error: "invalid_request" });
+
     const unsupported = yield* client.oauth.requestDeviceCode({
-      payload: { clientId: "unsupported-client" },
+      payload: { clientId: "unsupported-client", executorIdentitySecret },
       responseMode: "response-only",
     });
     expect(unsupported.status).toBe(400);
@@ -54,14 +71,17 @@ it.effect("尚未签发凭据时，设备授权服务返回等待状态", () =>
   Effect.gen(function* () {
     const oauth = yield* OAuthService;
     const clientId = "rabi-cli";
-    const { deviceCode } = yield* oauth.requestDeviceCode(clientId);
+    const { deviceCode } = yield* oauth.requestDeviceCode(
+      clientId,
+      executorIdentitySecret,
+    );
 
     expect(yield* oauth.exchangeDeviceCode(clientId, deviceCode)).toMatchObject(
       {
         status: "pending",
       },
     );
-  }).pipe(Effect.provide(OAuthService.layer)),
+  }).pipe(Effect.provide(oauthLayer)),
 );
 
 it.effect("设备码在声明的有效期结束时过期", () => {
@@ -69,7 +89,7 @@ it.effect("设备码在声明的有效期结束时过期", () => {
     const client = yield* HttpApiTest.groups(RabiApi, ["oauth"]);
     const clientId = "rabi-cli";
     const authorization = yield* client.oauth.requestDeviceCode({
-      payload: { clientId },
+      payload: { clientId, executorIdentitySecret },
     });
 
     const poll = client.oauth.exchangeDeviceCode({

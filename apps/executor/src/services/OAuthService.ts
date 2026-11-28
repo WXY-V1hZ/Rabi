@@ -11,7 +11,10 @@ import { HttpClient, HttpClientError } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { DeviceCodeGrant, RabiApi } from "protocol";
 import { BaseError } from "protocol/errors";
+import { ExecutorIdentityPath, ServerUrl } from "../config.ts";
 import { loadExecutorIdentity } from "./ExecutorIdentity.ts";
+
+const clientId = "rabi-cli";
 
 class DeviceAuthorizationRequestFailed extends BaseError<"DeviceAuthorizationRequestFailed"> {
   constructor(options: { readonly cause: unknown }) {
@@ -52,10 +55,9 @@ const isPollingTimeout = (error: unknown): boolean => {
   );
 };
 
-const makeOAuthService = Effect.fnUntraced(function* (
-  serverUrl: URL,
-  clientId: string,
-) {
+const makeOAuthService = Effect.gen(function* () {
+  const serverUrl = yield* ServerUrl;
+  const identityPath = yield* ExecutorIdentityPath;
   const client = yield* HttpClient.HttpClient;
   const api = yield* HttpApiClient.makeWith(RabiApi, {
     httpClient: client,
@@ -106,9 +108,9 @@ const makeOAuthService = Effect.fnUntraced(function* (
   const authorize = Effect.fnUntraced(function* (
     showAuthorization: (prompt: AuthorizationPrompt) => Effect.Effect<void>,
   ) {
-    const executorIdentitySecret = yield* loadExecutorIdentity;
+    const executorIdentitySecret = yield* loadExecutorIdentity(identityPath);
     const authorization = yield* api.oauth
-      .requestDeviceCode({ payload: { clientId } })
+      .requestDeviceCode({ payload: { clientId, executorIdentitySecret } })
       .pipe(
         Effect.mapError(
           (cause) => new DeviceAuthorizationRequestFailed({ cause }),
@@ -137,6 +139,5 @@ export class OAuthService extends Context.Service<OAuthService>()(
   "executor/services/OAuthService",
   { make: makeOAuthService },
 ) {
-  static readonly layer = (serverUrl: URL, clientId: string) =>
-    Layer.effect(OAuthService, OAuthService.make(serverUrl, clientId));
+  static readonly layer = Layer.effect(OAuthService, OAuthService.make);
 }
